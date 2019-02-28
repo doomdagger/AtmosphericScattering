@@ -57,6 +57,30 @@ float InvParamSunDirection(float u_s)
 }
 
 //-----------------------------------------------------------------------------------------
+// ParamViewDirection
+//-----------------------------------------------------------------------------------------
+float ParamViewDirection(float c_v, float h)
+{
+	float c_h = -sqrt(h * (2.0 * _PlanetRadius + h)) / (_PlanetRadius + h);
+	if (c_v > c_h)
+	{
+		return 0.5 * pow((c_v - c_h) / (1.0 - c_h), 0.2) + 0.5;
+	}
+	else
+	{
+		return 0.5 * pow((c_h - c_v) / (c_h + 1.0), 0.2);
+	}
+}
+
+//-----------------------------------------------------------------------------------------
+// ParamHeight
+//-----------------------------------------------------------------------------------------
+float ParamHeight(float h)
+{
+	return pow(h / _AtmosphereHeight, 0.5);
+}
+
+//-----------------------------------------------------------------------------------------
 // RaySphereIntersection
 //-----------------------------------------------------------------------------------------
 float2 RaySphereIntersection(float3 rayOrigin, float3 rayDir, float3 sphereCenter, float sphereRadius)
@@ -83,13 +107,13 @@ float2 RaySphereIntersection(float3 rayOrigin, float3 rayDir, float3 sphereCente
 void ApplyPhaseFunctionElek(inout float3 scatterR, inout float3 scatterM, float cosAngle)
 {
 	// r
-	float phase = (8.0 / 10.0) / (4 * PI) * ((7.0 / 5.0) + 0.5 * cosAngle);
+	float phase = (8.0 / 10.0) * ((7.0 / 5.0) + 0.5 * cosAngle);
 	scatterR *= phase;
 
 	// m
 	float g = _MieG;
 	float g2 = g * g;
-	phase = (1.0 / (4.0 * PI)) * ((3.0 * (1.0 - g2)) / (2.0 * (2.0 + g2))) * ((1 + cosAngle * cosAngle) / (pow((1 + g2 - 2 * g*cosAngle), 3.0 / 2.0)));
+	phase = ((3.0 * (1.0 - g2)) / (2.0 * (2.0 + g2))) * ((1 + cosAngle * cosAngle) / (pow((1 + g2 - 2 * g*cosAngle), 3.0 / 2.0)));
 	scatterM *= phase;
 }
 

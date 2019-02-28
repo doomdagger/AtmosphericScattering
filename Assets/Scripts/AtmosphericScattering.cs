@@ -52,6 +52,7 @@ public class AtmosphericScattering : MonoBehaviour
     public RenderMode RenderingMode = RenderMode.Optimized;
     public LightShaftsQuality LightShaftQuality = LightShaftsQuality.Medium;
     public ComputeShader ScatteringComputeShader;
+	public ComputeShader FrostbiteComputeShader;
     public Light Sun;
 
     private RenderTexture _particleDensityLUT = null;
@@ -393,29 +394,36 @@ public class AtmosphericScattering : MonoBehaviour
             _skyboxLUT.Create();
         }
 
-#if HIGH_QUALITY
-        if (_skyboxLUT2 == null)
-        {
-            _skyboxLUT2 = new RenderTexture((int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, 0, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
-            _skyboxLUT2.volumeDepth = (int)_skyboxLUTSize.z;
-            _skyboxLUT2.isVolume = true;
-            _skyboxLUT2.enableRandomWrite = true;
-            _skyboxLUT2.name = "SkyboxLUT2";
-            _skyboxLUT2.Create();
-        }
-#endif
+		if (true) {
+			int kernel = FrostbiteComputeShader.FindKernel("SingleScattering");
+			FrostbiteComputeShader.SetTexture(kernel, "_SkyboxLUT", _skyboxLUT);
+			UpdateFrostbiteComputeShaderParameters(kernel);
+			FrostbiteComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
+		} else {
+			int kernel = ScatteringComputeShader.FindKernel("SkyboxLUT");
+			ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT", _skyboxLUT);
+			UpdateCommonComputeShaderParameters(kernel);
+			ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
+		}
 
-        int kernel = ScatteringComputeShader.FindKernel("SkyboxLUT");
-
-        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT", _skyboxLUT);
-#if HIGH_QUALITY
-        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT2", _skyboxLUT2);
-#endif
-
-        UpdateCommonComputeShaderParameters(kernel);
-
-        ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
     }
+
+	private void UpdateFrostbiteComputeShaderParameters(int kernel)
+	{
+		FrostbiteComputeShader.SetTexture(kernel, "_TransmittanceLUT", _transmittanceLUT);
+		FrostbiteComputeShader.SetFloat("_AtmosphereHeight", AtmosphereHeight);
+		FrostbiteComputeShader.SetFloat("_PlanetRadius", PlanetRadius);
+		FrostbiteComputeShader.SetVector("_DensityScaleHeight", DensityScale);
+
+		FrostbiteComputeShader.SetVector("_ScatteringR", RayleighSct * RayleighScatterCoef);
+		FrostbiteComputeShader.SetVector("_ScatteringM", MieSct * MieScatterCoef);
+		FrostbiteComputeShader.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
+		FrostbiteComputeShader.SetVector("_ExtinctionM", MieSct * MieExtinctionCoef);
+
+		FrostbiteComputeShader.SetVector("_LightColor", Sun.color * Sun.intensity);
+		FrostbiteComputeShader.SetVector("_IncomingLight", IncomingLight);
+		FrostbiteComputeShader.SetFloat("_MieG", MieG);
+	}
 
     /// <summary>
     /// 

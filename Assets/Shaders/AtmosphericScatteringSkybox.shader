@@ -131,7 +131,7 @@ Shader "Skybox/AtmosphericScattering"
 				scatterM.x = scatterR.w;
 				scatterM.yz = tex3D(_SkyboxLUT2, coords).xy;
 #else
-				scatterM.xyz = scatterR.xyz * ((scatterR.w) / (scatterR.x));// *(_ScatteringR.x / _ScatteringM.x) * (_ScatteringM / _ScatteringR);
+				scatterM.xyz = scatterR.xyz * ((scatterR.w) / (scatterR.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM / _ScatteringR);
 #endif
 
 				float3 m = scatterM;
