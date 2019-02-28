@@ -28,6 +28,7 @@
 
 
 using UnityEngine;
+using UnityEditor;
 using System.Collections;
 using UnityEngine.Rendering;
 using System;
@@ -58,6 +59,8 @@ public class AtmosphericScattering : MonoBehaviour
     private RenderTexture _lightColorTexture;
     private Texture2D _lightColorTextureTemp;
 
+	private RenderTexture _transmittanceLUT = null;
+
     private Vector3 _skyboxLUTSize = new Vector3(32, 128, 32);
 
     private RenderTexture _skyboxLUT;
@@ -76,6 +79,7 @@ public class AtmosphericScattering : MonoBehaviour
 
     private Material _material;
     private Material _lightShaftMaterial;
+	private Material _frostbiteMat;
     private Camera _camera;
 
     private Color _sunColor;
@@ -153,14 +157,21 @@ public class AtmosphericScattering : MonoBehaviour
             throw new Exception("Critical Error: \"Hidden/AtmosphericScattering/LightShafts\" shader is missing. Make sure it is included in \"Always Included Shaders\" in ProjectSettings/Graphics.");
         _lightShaftMaterial = new Material(shader);
         
+		shader = Shader.Find("Hidden/FrostbiteAtmosphere");
+		if (shader == null)
+			throw new Exception("Critical Error: \"Hidden/FrostbiteAtmosphere\" shader is missing. Make sure it is included in \"Always Included Shaders\" in ProjectSettings/Graphics.");
+		_frostbiteMat = new Material(shader);
+
         _camera = GetComponent<Camera>();
 
         UpdateMaterialParameters(_material);
+		UpdateFrostbiteMaterialParameters (_frostbiteMat);
 
         //if (_particleDensityLUT == null)
         {
             InitialzieRandomVectorsLUT();
             PrecomputeParticleDensity();
+			PrecomputeTransmittance();
             CalculateLightLUTs();
         }
 
@@ -458,6 +469,7 @@ public class AtmosphericScattering : MonoBehaviour
     {
         Destroy(_material);
         Destroy(_lightShaftMaterial);
+		Destroy (_frostbiteMat);
     }
 
     /// <summary>
@@ -469,8 +481,6 @@ public class AtmosphericScattering : MonoBehaviour
         material.SetFloat("_PlanetRadius", PlanetRadius);
         material.SetVector("_DensityScaleHeight", DensityScale);
 
-        Vector4 scatteringR = new Vector4(5.8f, 13.5f, 33.1f, 0.0f) * 0.000001f;
-        Vector4 scatteringM = new Vector4(2.0f, 2.0f, 2.0f, 0.0f) * 0.00001f;
         material.SetVector("_ScatteringR", RayleighSct * RayleighScatterCoef);
         material.SetVector("_ScatteringM", MieSct * MieScatterCoef);
         material.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
@@ -491,6 +501,33 @@ public class AtmosphericScattering : MonoBehaviour
         material.SetTexture("_SkyboxLUT", _skyboxLUT);
         material.SetTexture("_SkyboxLUT2", _skyboxLUT2);
     }
+
+	private void UpdateFrostbiteMaterialParameters(Material material)
+	{
+		material.SetFloat("_AtmosphereHeight", AtmosphereHeight);
+		material.SetFloat("_PlanetRadius", PlanetRadius);
+		material.SetVector("_DensityScaleHeight", DensityScale);
+
+		material.SetVector("_ScatteringR", RayleighSct * RayleighScatterCoef);
+		material.SetVector("_ScatteringM", MieSct * MieScatterCoef);
+		material.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
+		material.SetVector("_ExtinctionM", MieSct * MieExtinctionCoef);
+
+		material.SetColor("_IncomingLight", IncomingLight);
+		material.SetFloat("_MieG", MieG);
+		material.SetFloat("_DistanceScale", DistanceScale);
+		material.SetColor("_SunColor", _sunColor);
+
+		//---------------------------------------------------
+
+		material.SetVector("_LightDir", new Vector4(Sun.transform.forward.x, Sun.transform.forward.y, Sun.transform.forward.z, 1.0f / (Sun.range * Sun.range)));
+		material.SetVector("_LightColor", Sun.color * Sun.intensity);
+
+		material.SetTexture("_TransmittanceLUT", _transmittanceLUT);
+
+		material.SetTexture("_SkyboxLUT", _skyboxLUT);
+		material.SetTexture("_SkyboxLUT2", _skyboxLUT2);
+	}
 
     /// <summary>
     /// 
@@ -702,6 +739,7 @@ public class AtmosphericScattering : MonoBehaviour
     private void UpdateLightScatteringParameters()
     {
         UpdateMaterialParameters(_material);
+		UpdateFrostbiteMaterialParameters (_frostbiteMat);
 
 #if UNITY_5_4_OR_NEWER
         _material.SetVectorArray("_FrustumCorners", _FrustumCorners);
@@ -891,4 +929,35 @@ public class AtmosphericScattering : MonoBehaviour
         _ditheringTexture.SetPixels32(c);
         _ditheringTexture.Apply();
     }
+
+	Texture2D toTexture2D(RenderTexture rTex)
+	{
+		Texture2D tex = new Texture2D(rTex.width, rTex.height, TextureFormat.RGBAHalf, false);
+		RenderTexture.active = rTex;
+		tex.ReadPixels(new Rect(0, 0, rTex.width, rTex.height), 0, 0);
+		tex.Apply();
+		return tex;
+	}
+
+	/// <summary>
+	/// 
+	/// </summary>
+	private void PrecomputeTransmittance()
+	{
+		if (_transmittanceLUT == null)
+		{
+			_transmittanceLUT = new RenderTexture(128, 32, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+			_transmittanceLUT.name = "TransmittanceLUT";
+			_transmittanceLUT.filterMode = FilterMode.Bilinear;
+			_transmittanceLUT.Create();
+		}
+
+		Texture nullTexture = null;
+		Graphics.Blit(nullTexture, _transmittanceLUT, _frostbiteMat, 0);
+
+		Texture2D tempTex = toTexture2D (_transmittanceLUT);
+		AssetDatabase.CreateAsset (tempTex, "Assets/Textures/transmittance.asset");
+
+		_frostbiteMat.SetTexture("_TransmittanceLUT", _transmittanceLUT);
+	}
 }
