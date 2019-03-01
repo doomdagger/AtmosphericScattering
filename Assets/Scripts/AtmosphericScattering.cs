@@ -184,7 +184,7 @@ public class AtmosphericScattering : MonoBehaviour
         UpdateCommonComputeShaderParameters(kernel);
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
-        SaveTextureAsKTX(_skyboxLUT, "skyboxlut");
+        SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
     }
 
     private void PrecomputeSkyboxLUT2()
@@ -205,7 +205,7 @@ public class AtmosphericScattering : MonoBehaviour
         UpdateCommonComputeShaderParameters(kernel);
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
-        SaveTextureAsKTX(_skyboxLUT2, "skyboxlut2");
+        SaveTextureAsKTX(_skyboxLUT2, "skyboxlut2", true);
     }
 
     /// <summary>
@@ -340,7 +340,7 @@ public class AtmosphericScattering : MonoBehaviour
         SaveTextureAsKTX(_gatherSumLUT, "gathersum");
     }
 
-    public void SaveTextureAsKTX(RenderTexture rtex, String name)
+    public void SaveTextureAsKTX(RenderTexture rtex, String name, bool tile3D = false)
     {
         int texDepth = rtex.volumeDepth;
         int texWidth = rtex.width;
@@ -348,16 +348,13 @@ public class AtmosphericScattering : MonoBehaviour
         int floatSize = sizeof(float);
         int channels = 4;
 
-        int trueDepth;
-        if (texDepth == 0)
+        bool tileEnabled = tile3D && texDepth > 1;
+        if (tileEnabled)
         {
-            trueDepth = 0;
+            texWidth *= texDepth;
             texDepth = 1;
         }
-        else
-        {
-            trueDepth = texDepth;
-        }
+
 
         int texSize = texWidth * texHeight * texDepth;
 
@@ -387,7 +384,7 @@ public class AtmosphericScattering : MonoBehaviour
         UInt32 glBaseInternalFormat = 0x1908; // RGBA
         UInt32 width = (UInt32)texWidth;
         UInt32 height = (UInt32)texHeight;
-        UInt32 depth = (UInt32)trueDepth;
+        UInt32 depth = (UInt32)(texDepth == 1 ? 0 : texDepth);
         UInt32 numOfArrElem = 0;
         UInt32 numOfFace = 1;
         UInt32 numOfMip = 1;
@@ -409,17 +406,25 @@ public class AtmosphericScattering : MonoBehaviour
         UInt32 imageSize = (UInt32)(texSize * channels * glTypeSize);
         writer.Write(imageSize);
 
-        for (int k = 0; k < texDepth; k++)
+        if (tileEnabled)
         {
-            for (int j = 0; j < texHeight; j++)
-                for (int i = 0; i < texWidth; i++)
-                {
-                    int startIndex = k * texWidth * texHeight * channels + j * texWidth * channels + i * channels;
-                    writer.Write(Half.GetBytes((Half)data[startIndex]));
-                    writer.Write(Half.GetBytes((Half)data[startIndex+1]));
-                    writer.Write(Half.GetBytes((Half)data[startIndex+2]));
-                    writer.Write(Half.GetBytes((Half)data[startIndex+3]));
-                }
+            for (int j = 0; j < rtex.height; j++)
+                for (int k = 0; k < rtex.volumeDepth; k++)
+                    for (int i = 0; i < rtex.width; i++)
+                    {
+                        int startIndex = k * rtex.width * rtex.height * channels + j * rtex.width * channels + i * channels;
+                        writer.Write(Half.GetBytes((Half)data[startIndex]));
+                        writer.Write(Half.GetBytes((Half)data[startIndex + 1]));
+                        writer.Write(Half.GetBytes((Half)data[startIndex + 2]));
+                        writer.Write(Half.GetBytes((Half)data[startIndex + 3]));
+                    }
+        }
+        else
+        {
+            for (int i = 0; i < data.Length; ++i)
+            {
+                writer.Write(Half.GetBytes((Half)data[i]));
+            }
         }
 
         writer.Close();
