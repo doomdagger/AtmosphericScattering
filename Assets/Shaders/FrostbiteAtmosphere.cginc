@@ -71,6 +71,14 @@ float ParamHeight(float h)
 }
 
 //-----------------------------------------------------------------------------------------
+// ParamSunDirection
+//-----------------------------------------------------------------------------------------
+float ParamSunDirection(float c_s)
+{
+	return 0.5 * ((atan(max(c_s, -0.1975) * tan(1.26*1.1)) / 1.1) + (1 - 0.26));
+}
+
+//-----------------------------------------------------------------------------------------
 // RaySphereIntersection
 //-----------------------------------------------------------------------------------------
 float2 RaySphereIntersection(float3 rayOrigin, float3 rayDir, float3 sphereCenter, float sphereRadius)
@@ -107,7 +115,7 @@ void ApplyPhaseFunctionElek(inout float3 scatterR, inout float3 scatterM, float 
 	scatterM *= phase;
 }
 
-void ApproximateMieFromRayleigh(in float4 scatterR, inout float3 scatterM)
+void ApproximateMieFromRayleigh(in float4 scatterR, out float3 scatterM)
 {
     scatterM.xyz = scatterR.xyz * ((scatterR.w) / (scatterR.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM / _ScatteringR);
 }

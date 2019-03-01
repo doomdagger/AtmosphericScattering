@@ -82,44 +82,31 @@ Shader "Skybox/AtmosphericScattering"
 				float3 planetCenter = _CameraPos;
 				planetCenter = float3(0, -_PlanetRadius, 0);
 
-				float4 scatterR = 0;
-				float4 scatterM = 0;
-
 				float height = length(rayStart - planetCenter) - _PlanetRadius;
 				float3 normal = normalize(rayStart - planetCenter);
 
 				float viewZenith = dot(normal, rayDir);
 				float sunZenith = dot(normal, -lightDir);
+				float3 coords = float3(ParamHeight(height), ParamViewDirection(viewZenith, height), ParamSunDirection(sunZenith));
 
-				float3 coords = float3(height / _AtmosphereHeight, viewZenith * 0.5 + 0.5, sunZenith * 0.5 + 0.5);
+				float3 lightInscatter = 0;
 
-				coords.x = pow(height / _AtmosphereHeight, 0.5);
-				float ch = -(sqrt(height * (2 * _PlanetRadius + height)) / (_PlanetRadius + height));
-				if (viewZenith > ch)
-				{
-					coords.y = 0.5 * pow((viewZenith - ch) / (1 - ch), 0.2) + 0.5;
-				}
-				else
-				{
-					coords.y = 0.5 * pow((ch - viewZenith) / (ch + 1), 0.2);
-				}
-				coords.z = 0.5 * ((atan(max(sunZenith, -0.1975) * tan(1.26*1.1)) / 1.1) + (1 - 0.26));
-
-				scatterR = tex3D(_SkyboxLUT, coords);			
-
-				scatterM.xyz = scatterR.xyz * ((scatterR.w) / (scatterR.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM / _ScatteringR);
-
+				// first order
+				float4 scatterR = 0;
+				float4 scatterM = 0;
+				scatterR = tex3D(_SkyboxLUT, coords);		
+				ApproximateMieFromRayleigh(scatterR, scatterM.xyz);
 				ApplyPhaseFunctionElek(scatterR.xyz, scatterM.xyz, dot(rayDir, -lightDir.xyz));
-				// float3 lightInscatter = scatterR + scatterM;
+				lightInscatter += scatterR + scatterM;
 
+				// second order
 				float4 scatterR2 = 0;
 				float4 scatterM2 = 0;
 				scatterR2 = tex3D(_SkyboxLUT2, coords);
-				scatterM2.xyz = scatterR2.xyz * ((scatterR2.w) / (scatterR2.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM / _ScatteringR);
-				
+				ApproximateMieFromRayleigh(scatterR2, scatterM2.xyz);
 				//ApplyPhaseFunctionElek(scatterR2.xyz, scatterM2.xyz, dot(rayDir, -lightDir.xyz));
 				
-				float3 lightInscatter = scatterR;
+				//lightInscatter += max(scatterR2.xyz + scatterM2.xyz, 0.0);
 
 				return float4(max(0, lightInscatter), 1);
 			}

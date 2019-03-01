@@ -243,7 +243,7 @@ ScatteringOutput IntegrateInscattering(float3 rayStart, float3 rayDir, float ray
     totalScatterR *= _ScatteringR.xyz * coef;
     totalScatterM *= _ScatteringM.xyz * coef;
 
-    // Attention: should apply Phase Function before Mie approximation!
+    // Attention: should apply Phase Function after Mie approximation!
     // ApplyPhaseFunctionElek(totalScatterR, totalScatterM, dot(-lightDir, rayDir));
 
 	output.rayleigh = totalScatterR;
@@ -379,8 +379,7 @@ ScatteringOutput IntegrateMultiScattering(float3 rayStart, float3 rayDir, float 
     totalScatterR *= _ScatteringR.xyz * coef;
     totalScatterM *= _ScatteringM.xyz * coef;
 
-    // Attention: should apply Phase Function before Mie approximation!
-    //ApplyPhaseFunctionElek(totalScatterR, totalScatterM, dot(-lightDir, rayDir));
+    // Attention: should apply Phase Function after Mie approximation!
 
     output.rayleigh = totalScatterR;
     output.mie = totalScatterM;
