@@ -162,8 +162,7 @@ half4 PrecomputeTransmittance(float height, float3 rayDir)
 	}
 
 	half4 transmittance = 1;
-	transmittance.xyz = exp(-(totalDensity.x * _ExtinctionR + totalDensity.y * _ExtinctionR));
+	transmittance.xyz = exp(-(totalDensity.x * _ExtinctionR + totalDensity.y * _ExtinctionM));
 
 	return transmittance;
 }
-

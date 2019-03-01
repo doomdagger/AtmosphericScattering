@@ -394,7 +394,7 @@ public class AtmosphericScattering : MonoBehaviour
             _skyboxLUT.Create();
         }
 
-		if (true) {
+		if (false) {
 			int kernel = FrostbiteComputeShader.FindKernel("SingleScattering");
 			FrostbiteComputeShader.SetTexture(kernel, "_SkyboxLUT", _skyboxLUT);
 			UpdateFrostbiteComputeShaderParameters(kernel);
@@ -431,6 +431,8 @@ public class AtmosphericScattering : MonoBehaviour
     private void UpdateCommonComputeShaderParameters(int kernel)
     {
         ScatteringComputeShader.SetTexture(kernel, "_ParticleDensityLUT", _particleDensityLUT);
+        ScatteringComputeShader.SetTexture(kernel, "_TransmittanceLUT", _transmittanceLUT);
+
         ScatteringComputeShader.SetFloat("_AtmosphereHeight", AtmosphereHeight);
         ScatteringComputeShader.SetFloat("_PlanetRadius", PlanetRadius);
         ScatteringComputeShader.SetVector("_DensityScaleHeight", DensityScale);
@@ -439,6 +441,8 @@ public class AtmosphericScattering : MonoBehaviour
         ScatteringComputeShader.SetVector("_ScatteringM", MieSct * MieScatterCoef);
         ScatteringComputeShader.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
         ScatteringComputeShader.SetVector("_ExtinctionM", MieSct * MieExtinctionCoef);
+
+        ScatteringComputeShader.SetVector("_LightColor", Sun.color * Sun.intensity);
 
         ScatteringComputeShader.SetVector("_IncomingLight", IncomingLight);
         ScatteringComputeShader.SetFloat("_MieG", MieG);

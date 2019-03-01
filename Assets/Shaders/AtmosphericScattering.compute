@@ -34,6 +34,8 @@ RWTexture3D<float2> _SkyboxLUT2;
 RWTexture3D<float4> _InscatteringLUT;
 RWTexture3D<float4> _ExtinctionLUT;
 
+Texture2D<half4> _TransmittanceLUT;
+
 Texture2D<float2> _ParticleDensityLUT;
 SamplerState sampler_ParticleDensityLUT;
 SamplerState PointClampSampler;
@@ -53,6 +55,8 @@ float4 _BottomLeftCorner;
 float4 _BottomRightCorner;
 float4 _TopLeftCorner;
 float4 _TopRightCorner;
+
+float4 _LightColor;
 
 float4 _LightDir;
 float4 _CameraPos;
@@ -91,6 +95,67 @@ float2 RaySphereIntersection(float3 rayOrigin, float3 rayDir, float3 sphereCente
         d = sqrt(d);
         return float2(-b - d, -b + d) / (2 * a);
     }
+}
+
+//-----------------------------------------------------------------------------------------
+// InvParamHeight
+//-----------------------------------------------------------------------------------------
+float InvParamHeight(float u_h)
+{
+    return u_h * u_h * _AtmosphereHeight;
+}
+
+//-----------------------------------------------------------------------------------------
+// InvParamViewDirection
+//-----------------------------------------------------------------------------------------
+float InvParamViewDirection(float u_v, float h)
+{
+    float c_h = -sqrt(h * (2.0 * _PlanetRadius + h)) / (_PlanetRadius + h);
+    if (u_v > 0.5)
+    {
+        return c_h + pow((u_v - 0.5) * 2.0, 5.0) * (1.0 - c_h);
+    }
+    else
+    {
+        return c_h - pow(u_v * 2.0, 5.0) * (1.0 + c_h);
+    }
+}
+
+//-----------------------------------------------------------------------------------------
+// InvParamSunDirection
+//-----------------------------------------------------------------------------------------
+float InvParamSunDirection(float u_s)
+{
+    return (tan((2.0 * u_s - 1.0 + 0.26) * 0.75)) / (tan(1.26 * 0.75));
+}
+
+//-----------------------------------------------------------------------------------------
+// ParamViewDirection
+//-----------------------------------------------------------------------------------------
+float ParamViewDirection(float c_v, float h)
+{
+    float c_h = -sqrt(h * (2.0 * _PlanetRadius + h)) / (_PlanetRadius + h);
+    if (c_v > c_h)
+    {
+        return 0.5 * pow((c_v - c_h) / (1.0 - c_h), 0.2) + 0.5;
+    }
+    else
+    {
+        return 0.5 * pow((c_h - c_v) / (c_h + 1.0), 0.2);
+    }
+}
+
+//-----------------------------------------------------------------------------------------
+// ParamHeight
+//-----------------------------------------------------------------------------------------
+float ParamHeight(float h)
+{
+    return pow(h / _AtmosphereHeight, 0.5);
+}
+
+void GetTransmittanceP2PA(inout float3 transmittance, float2 uv)
+{
+    transmittance = _TransmittanceLUT.SampleLevel(LinearClampSampler, uv, 0.0).rgb;
 }
 
 //-----------------------------------------------------------------------------------------
@@ -140,52 +205,85 @@ void ApplyPhaseFunction(inout float3 scatterR, inout float3 scatterM, float cosA
 }
 
 //-----------------------------------------------------------------------------------------
+// ApplyPhaseFunctionElek
+//-----------------------------------------------------------------------------------------
+void ApplyPhaseFunctionElek(inout float3 scatterR, inout float3 scatterM, float cosAngle)
+{
+	// r
+    float phase = (8.0 / 10.0) * ((7.0 / 5.0) + 0.5 * cosAngle);
+    scatterR *= phase;
+
+	// m
+    float g = _MieG;
+    float g2 = g * g;
+    phase = ((3.0 * (1.0 - g2)) / (2.0 * (2.0 + g2))) * ((1 + cosAngle * cosAngle) / (pow((1 + g2 - 2 * g * cosAngle), 3.0 / 2.0)));
+    scatterM *= phase;
+}
+
+//-----------------------------------------------------------------------------------------
 // IntegrateInscattering
 //-----------------------------------------------------------------------------------------
-ScatteringOutput IntegrateInscattering(float3 rayStart, float3 rayDir, float rayLength, float3 planetCenter, float3 lightDir)
+ScatteringOutput IntegrateInscattering(float3 rayStart, float3 rayDir, float rayLength, float3 planetCenter, float3 lightDir, float height)
 {
 	float sampleCount = 64;
-	float3 step = rayDir * (rayLength / sampleCount);
-	float stepSize = length(step);
+    float stepSize = length(rayDir * rayLength) / sampleCount;
 
-	float2 densityCP = 0;
-	float3 scatterR = 0;
-	float3 scatterM = 0;
+    float2 previousDensity, currentDensity, totalDensity;
+    float3 previousScatterR, currentScatterR, totalScatterR;
+    float3 previousScatterM, currentScatterM, totalScatterM;
 
-	float2 localDensity;
-	float2 densityPA;
+    float2 transUV;
+    transUV.x = ParamViewDirection(-lightDir.y, height);
+    transUV.y = ParamHeight(height);
 
-	float2 prevLocalDensity;
-	float3 prevLocalInscatterR, prevLocalInscatterM;
-	GetAtmosphereDensity(rayStart, planetCenter, lightDir, prevLocalDensity, densityPA);
-	ComputeLocalInscattering(prevLocalDensity, densityPA, densityCP, prevLocalInscatterR, prevLocalInscatterM);
+    float3 transmittance;
+    previousDensity = exp(-(height.xx / _DensityScaleHeight.xy));
+    GetTransmittanceP2PA(transmittance, transUV);
+
+    previousScatterR = previousDensity.x * transmittance;
+    previousScatterM = previousDensity.y * transmittance;
 
 	// P - current integration point
 	// C - camera position
 	// A - top of the atmosphere
 	[loop]
-	for (float s = 1.0; s < sampleCount; s += 1)
+	for (int step = 1; step <= sampleCount; step += 1)
 	{
-		float3 p = rayStart + step * s;
+		float3 p = rayStart + step * stepSize * rayDir;
 
-		GetAtmosphereDensity(p, planetCenter, lightDir, localDensity, densityPA);
-		densityCP += (localDensity + prevLocalDensity) * (stepSize / 2.0);
+        height = length(p - planetCenter) - _PlanetRadius;
+        transUV.x = ParamViewDirection(-lightDir.y, height);
+        transUV.y = ParamHeight(height);
 
-		prevLocalDensity = localDensity;
+        currentDensity = exp(-(height.xx / _DensityScaleHeight.xy));
+        totalDensity += (currentDensity + previousDensity) / 2.0 * stepSize;
 
-		float3 localInscatterR, localInscatterM;
-		ComputeLocalInscattering(localDensity, densityPA, densityCP, localInscatterR, localInscatterM);
-		
-		scatterR += (localInscatterR + prevLocalInscatterR) * (stepSize / 2.0);
-		scatterM += (localInscatterM + prevLocalInscatterM) * (stepSize / 2.0);
+        GetTransmittanceP2PA(transmittance, transUV);
+        transmittance *= exp(-(totalDensity.x * _ExtinctionR.xyz + totalDensity.y * _ExtinctionM.xyz));
 
-		prevLocalInscatterR = localInscatterR;
-		prevLocalInscatterM = localInscatterM;
+        currentScatterR = transmittance * currentDensity.x;
+        currentScatterM = transmittance * currentDensity.y;
+
+        totalScatterR += (previousScatterR + currentScatterR) / 2.0 * stepSize;
+        totalScatterM += (previousScatterM + currentScatterM) / 2.0 * stepSize;
+
+        previousDensity = currentDensity;
+        previousScatterR = currentScatterR;
+        previousScatterM = currentScatterM;
 	}
 
 	ScatteringOutput output;
-	output.rayleigh = scatterR;
-	output.mie = scatterM;
+
+    float3 coef = 1.0 / (4.0 * PI) * _LightColor.rgb;
+
+    totalScatterR *= _ScatteringR.xyz * coef;
+    totalScatterM *= _ScatteringM.xyz * coef;
+
+    // Attention: should apply Phase Function before Mie approximation!
+    //ApplyPhaseFunctionElek(totalScatterR, totalScatterM, dot(-lightDir, rayDir));
+
+	output.rayleigh = totalScatterR;
+	output.mie = totalScatterM;
 
 	return output;
 }
@@ -259,24 +357,9 @@ void SkyboxLUT(uint3 id : SV_DispatchThreadID)
 	// linear parameters
 	float3 coords = float3(id.x / (w - 1), id.y / (h - 1), id.z / (d - 1));
 
-	float height = coords.x * coords.x * _AtmosphereHeight;
-	//float height = coords.x * _AtmosphereHeight;
-	float ch = -(sqrt(height * (2 * _PlanetRadius + height)) / (_PlanetRadius + height));
-
-	float viewZenithAngle = coords.y;
-	//float viewZenithAngle = coords.y * 2.0 - 1.0;
-
-	if (viewZenithAngle > 0.5)
-	{
-		viewZenithAngle = ch + pow((viewZenithAngle-0.5)*2, 5) * (1 - ch);
-	}
-	else
-	{
-		viewZenithAngle = ch - pow(viewZenithAngle*2, 5) * (1 + ch);
-	}
-
-	float sunZenithAngle = (tan((2 * coords.z - 1 + 0.26)*0.75)) / (tan(1.26 * 0.75));// coords.z * 2.0 - 1.0;
-	//float sunZenithAngle = coords.z * 2.0 - 1.0;
+    float height = InvParamHeight(coords.x);
+    float viewZenithAngle = InvParamViewDirection(coords.y, height);
+    float sunZenithAngle = InvParamSunDirection(coords.z);
 
 	float3 planetCenter = float3(0, -_PlanetRadius, 0);
 	float3 rayStart = float3(0, height, 0);
@@ -284,22 +367,16 @@ void SkyboxLUT(uint3 id : SV_DispatchThreadID)
 	float3 rayDir = float3(sqrt(saturate(1 - viewZenithAngle * viewZenithAngle)), viewZenithAngle, 0);
 	float3 lightDir = -float3(sqrt(saturate(1 - sunZenithAngle * sunZenithAngle)), sunZenithAngle, 0);
 
-	float rayLength = 1e20;
 	float2 intersection = RaySphereIntersection(rayStart, rayDir, planetCenter, _PlanetRadius + _AtmosphereHeight);	
-	rayLength = intersection.y;
+    float rayLength = intersection.y;
 
     intersection = RaySphereIntersection(rayStart, rayDir, planetCenter, _PlanetRadius);
     if (intersection.x > 0)
         rayLength = min(rayLength, intersection.x);
 
-	ScatteringOutput scattering = IntegrateInscattering(rayStart, rayDir, rayLength, planetCenter, lightDir);
+	ScatteringOutput scattering = IntegrateInscattering(rayStart, rayDir, rayLength, planetCenter, lightDir, height);
 	
-	//color.inscattering.z = coords.z;
 	_SkyboxLUT[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
-
-#ifdef HIGH_QUALITY
-	_SkyboxLUT2[id.xyz] = scattering.mie.yz;
-#endif
 }
 
 //-----------------------------------------------------------------------------------------

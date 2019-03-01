@@ -107,13 +107,13 @@ void ApplyPhaseFunction(inout float3 scatterR, inout float3 scatterM, float cosA
 void ApplyPhaseFunctionElek(inout float3 scatterR, inout float3 scatterM, float cosAngle)
 {
 	// r
-	float phase = (8.0 / 10.0) / (4 * PI) * ((7.0 / 5.0) + 0.5 * cosAngle);
+	float phase = (8.0 / 10.0) * ((7.0 / 5.0) + 0.5 * cosAngle);
 	scatterR *= phase;
 
 	// m
 	float g = _MieG;
 	float g2 = g * g;
-	phase = (1.0 / (4.0 * PI)) * ((3.0 * (1.0 - g2)) / (2.0 * (2.0 + g2))) * ((1 + cosAngle * cosAngle) / (pow((1 + g2 - 2 * g*cosAngle), 3.0 / 2.0)));
+	phase = ((3.0 * (1.0 - g2)) / (2.0 * (2.0 + g2))) * ((1 + cosAngle * cosAngle) / (pow((1 + g2 - 2 * g*cosAngle), 3.0 / 2.0)));
 	scatterM *= phase;
 }
 
