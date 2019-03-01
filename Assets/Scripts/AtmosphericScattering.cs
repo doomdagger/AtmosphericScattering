@@ -28,9 +28,7 @@
 
 
 using UnityEngine;
-using UnityEditor;
 using System.Collections;
-using UnityEngine.Rendering;
 using System;
 using System.Text;
 using System.IO;

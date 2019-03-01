@@ -957,7 +957,7 @@ MonoBehaviour:
   LightShaftQuality: 1
   ScatteringComputeShader: {fileID: 7200000, guid: df3c1b1294c79e547a1f7039d78a1b65,
     type: 3}
-  FrostbiteComputeShader: {fileID: 7200000, guid: eebe9b000dd43d34388bad184f4bbe96,
+  FrostbiteComputeShader: {fileID: 7200000, guid: 1361bc3948c41aa4c8c7ae583c06f7fc,
     type: 3}
   Sun: {fileID: 961490231}
   SampleCount: 16
