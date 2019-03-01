@@ -120,7 +120,7 @@ class AtmosphericScatteringEditor : Editor
             DistanceScale.floatValue = EditorGUILayout.FloatField("Distance Scale", DistanceScale.floatValue);
             GUILayout.Label("* - Change requires LookUp table update");
             if (GUILayout.Button("Update LookUp Tables") && a.IsInitialized())
-                ((AtmosphericScattering)target).CalculateLightLUTs();
+                ((AtmosphericScattering)target).CalculateAtmosphere();
         }
 
         a.SunFoldout = EditorGUILayout.Foldout(a.SunFoldout, "Sun");
@@ -149,22 +149,10 @@ class AtmosphericScatteringEditor : Editor
         {
             bool renderLightShafts = RenderLightShafts.boolValue;
             RenderLightShafts.boolValue = EditorGUILayout.Toggle("Enable Light Shafts", RenderLightShafts.boolValue);
-            if (renderLightShafts != RenderLightShafts.boolValue && a.IsInitialized()) // change
-            {
-                if (RenderLightShafts.boolValue)
-                    a.EnableLightShafts();
-                else
-                    a.DisableLightShafts();
-            }
 
             AtmosphericScattering.LightShaftsQuality quality = (AtmosphericScattering.LightShaftsQuality)LightShaftQuality.enumValueIndex;
             AtmosphericScattering.LightShaftsQuality currentQuality = (AtmosphericScattering.LightShaftsQuality)EditorGUILayout.EnumPopup("Quality", (AtmosphericScattering.LightShaftsQuality)LightShaftQuality.enumValueIndex);
             LightShaftQuality.enumValueIndex = (int)currentQuality;
-            if (quality != currentQuality && a.IsInitialized())
-            {
-                serializedObject.ApplyModifiedProperties();
-                a.InitializeLightShafts();
-            }
 
             SampleCount.intValue = EditorGUILayout.IntSlider("Sample Count", SampleCount.intValue, 1, 64);
             //maxRayLengthProp.floatValue = EditorGUILayout.FloatField("Max Ray Length", maxRayLengthProp.floatValue);
@@ -175,21 +163,9 @@ class AtmosphericScatteringEditor : Editor
         {
             bool reflectionProbe = ReflectionProbe.boolValue;
             ReflectionProbe.boolValue = EditorGUILayout.Toggle("Enable Reflection Probe", ReflectionProbe.boolValue);
-            if(reflectionProbe != ReflectionProbe.boolValue && a.IsInitialized())
-            {
-                if (ReflectionProbe.boolValue)
-                    a.EnableReflectionProbe();
-                else
-                    a.DisableReflectionProbe();
-            }
 
             int resolution = ReflectionProbeResolution.intValue;
             ReflectionProbeResolution.intValue = GetResolution(EditorGUILayout.Popup("Resolution", GetResolutionIndex(ReflectionProbeResolution.intValue), ResolutionNames));
-            if (resolution != ReflectionProbeResolution.intValue && a.IsInitialized())
-            {
-                serializedObject.ApplyModifiedProperties();
-                a.ChangeReflectionProbeResolution();
-            }
         }
 
         serializedObject.ApplyModifiedProperties();

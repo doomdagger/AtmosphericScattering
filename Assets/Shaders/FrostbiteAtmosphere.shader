@@ -90,14 +90,7 @@
 
 			half4 frag(v2f i) : SV_Target
 			{
-				float height = InvParamHeight(i.uv.y);
-				float cos_v = InvParamViewDirection(i.uv.x, height);
-				float sin_v = sqrt(saturate(1.0 - cos_v * cos_v));
-				float3 rayDir = float3(sin_v, cos_v, 0.0);
-
-				half4 transmittance = PrecomputeTransmittance(height, rayDir);
-
-				return transmittance;
+				return PrecomputeGatherSum(i.uv);;
 			}
 			ENDCG
 		}

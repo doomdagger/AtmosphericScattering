@@ -49,7 +49,7 @@ Shader "Skybox/AtmosphericScattering"
 			#pragma target 5.0
 			
 			#include "UnityCG.cginc"
-			#include "AtmosphericScattering.cginc"
+			#include "FrostbiteAtmosphere.cginc"
 
 			float3 _CameraPos;
 			
@@ -74,26 +74,6 @@ Shader "Skybox/AtmosphericScattering"
 			
 			fixed4 frag (v2f i) : SV_Target
 			{
-#ifdef ATMOSPHERE_REFERENCE
-				float3 rayStart = _CameraPos;
-				float3 rayDir = normalize(mul((float3x3)unity_ObjectToWorld, i.vertex));
-
-				float3 lightDir = -_WorldSpaceLightPos0.xyz;
-
-				float3 planetCenter = _CameraPos;
-				planetCenter = float3(0, -_PlanetRadius, 0);
-
-				float2 intersection = RaySphereIntersection(rayStart, rayDir, planetCenter, _PlanetRadius + _AtmosphereHeight);		
-				float rayLength = intersection.y;
-
-				intersection = RaySphereIntersection(rayStart, rayDir, planetCenter, _PlanetRadius);
-				if (intersection.x > 0)
-					rayLength = min(rayLength, intersection.x);
-
-				float4 extinction;
-				float4 inscattering = IntegrateInscattering(rayStart, rayDir, rayLength, planetCenter, 1, lightDir, 16, extinction);
-				return float4(inscattering.xyz, 1);
-#else
 				float3 rayStart = _CameraPos;
 				float3 rayDir = normalize(mul((float3x3)unity_ObjectToWorld, i.vertex));
 
@@ -130,12 +110,18 @@ Shader "Skybox/AtmosphericScattering"
 				scatterM.xyz = scatterR.xyz * ((scatterR.w) / (scatterR.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM / _ScatteringR);
 
 				ApplyPhaseFunctionElek(scatterR.xyz, scatterM.xyz, dot(rayDir, -lightDir.xyz));
-				float3 lightInscatter = scatterR + scatterM;
-#ifdef RENDER_SUN
-				// lightInscatter += RenderSun(m, dot(rayDir, -lightDir.xyz)) * _SunIntensity;
-#endif
+				// float3 lightInscatter = scatterR + scatterM;
+
+				float4 scatterR2 = 0;
+				float4 scatterM2 = 0;
+				scatterR2 = tex3D(_SkyboxLUT2, coords);
+				scatterM2.xyz = scatterR2.xyz * ((scatterR2.w) / (scatterR2.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM / _ScatteringR);
+				
+				//ApplyPhaseFunctionElek(scatterR2.xyz, scatterM2.xyz, dot(rayDir, -lightDir.xyz));
+				
+				float3 lightInscatter = scatterR;
+
 				return float4(max(0, lightInscatter), 1);
-#endif
 			}
 			ENDCG
 		}
