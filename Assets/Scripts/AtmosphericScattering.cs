@@ -61,7 +61,7 @@ public class AtmosphericScattering : MonoBehaviour
 
     private Vector3 _skyboxLUTSize = new Vector3(32, 128, 32);
 
-    private Vector3 _inscatteringLUTSize = new Vector3(8, 8, 128);
+    private Vector3 _inscatteringLUTSize = new Vector3(32, 32, 16);
     private RenderTexture _inscatteringLUT;
     private RenderTexture _extinctionLUT;
 

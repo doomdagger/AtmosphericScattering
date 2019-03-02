@@ -114,8 +114,8 @@ class AtmosphericScatteringEditor : Editor
         {
             RenderAtmosphericFog.boolValue = EditorGUILayout.Toggle("Render Atm Fog", RenderAtmosphericFog.boolValue);
             IncomingLight.colorValue = EditorGUILayout.ColorField(new GUIContent("Incoming Light (*)"), IncomingLight.colorValue, false, false, true, new ColorPickerHDRConfig(0, 10, 0, 10));            
-            RayleighScatterCoef.floatValue = EditorGUILayout.Slider("Rayleigh Coef (*)", RayleighScatterCoef.floatValue, 0, 4);
-            MieScatterCoef.floatValue = EditorGUILayout.Slider("Mie Coef (*)", MieScatterCoef.floatValue, 0, 4);
+            RayleighScatterCoef.floatValue = EditorGUILayout.Slider("Rayleigh Coef (*)", RayleighScatterCoef.floatValue, 1, 10);
+            MieScatterCoef.floatValue = EditorGUILayout.Slider("Mie Coef (*)", MieScatterCoef.floatValue, 1, 15);
             MieG.floatValue = EditorGUILayout.Slider("MieG", MieG.floatValue, 0, 0.999f);
             DistanceScale.floatValue = EditorGUILayout.FloatField("Distance Scale", DistanceScale.floatValue);
             GUILayout.Label("* - Change requires LookUp table update");
