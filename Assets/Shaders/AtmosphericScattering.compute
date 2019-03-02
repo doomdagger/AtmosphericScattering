@@ -27,11 +27,23 @@
 
 #pragma kernel SkyboxLUT
 #pragma kernel MultipleScatterLUT
+#pragma kernel AerialPerspLUT
 
 RWTexture3D<float4> _SkyboxLUT;
 RWTexture3D<float4> _SkyboxLUT2;
 RWTexture3D<float4> _SkyboxLUTSingle;
 
+RWTexture3D<float4> _InscatteringLUT;
+RWTexture3D<float4> _ExtinctionLUT;
+
+float3 _InscatteringLUTSize;
+
+float4 _BottomLeftCorner;
+float4 _TopLeftCorner;
+float4 _TopRightCorner;
+float4 _BottomRightCorner;
+
+Texture2D<half4> _GatherSumLUT;
 Texture2D<half4> _GatherSumLUT2;
 Texture2D<half4> _TransmittanceLUT;
 
@@ -141,6 +153,17 @@ float ParamHeight(float h)
     return pow(h / _AtmosphereHeight, 0.5);
 }
 
+//-----------------------------------------------------------------------------------------
+// ParamSunDirection
+//-----------------------------------------------------------------------------------------
+float ParamSunDirection(float c_s)
+{
+	return 0.5 * ((atan(max(c_s, -0.1975) * tan(1.26*1.1)) / 1.1) + (1 - 0.26));
+}
+
+//-----------------------------------------------------------------------------------------
+// GetTransmittanceP2PA
+//-----------------------------------------------------------------------------------------
 void GetTransmittanceP2PA(inout float3 transmittance, float2 uv)
 {
     transmittance = _TransmittanceLUT.SampleLevel(LinearClampSampler, uv, 0.0).rgb;
@@ -294,9 +317,9 @@ void ApproximateMieFromRayleigh(in float4 scatterR, out float3 scatterM)
 }
 
 //-----------------------------------------------------------------------------------------
-// GatherSum
+// GatherSum2
 //-----------------------------------------------------------------------------------------
-void GatherSum(out float3 scatterR, out float3 scatterM, float2 coords)
+void GatherSum2(out float3 scatterR, out float3 scatterM, float2 coords)
 {
 	float4 gathered = _GatherSumLUT2.SampleLevel(LinearClampSampler, coords, 0.0);
 	scatterR = gathered.xyz;
@@ -319,7 +342,7 @@ ScatteringOutput IntegrateMultiScattering(float3 rayStart, float3 rayDir, float 
     float3 transmittance;
     previousDensity = exp(-(height.xx / _DensityScaleHeight.xy));
 
-    GatherSum(gatheredScatterR, gatheredScatterM, coords.xz);
+    GatherSum2(gatheredScatterR, gatheredScatterM, coords.xz);
 
     previousScatterR = previousDensity.x * gatheredScatterR;
     previousScatterM = previousDensity.y * gatheredScatterM;
@@ -339,7 +362,7 @@ ScatteringOutput IntegrateMultiScattering(float3 rayStart, float3 rayDir, float 
 
         transmittance = exp(-(totalDensity.x * _ExtinctionR.xyz + totalDensity.y * _ExtinctionM.xyz));
 
-		GatherSum(gatheredScatterR, gatheredScatterM, coords.xz);
+		GatherSum2(gatheredScatterR, gatheredScatterM, coords.xz);
 
         currentScatterR = transmittance * currentDensity.x * gatheredScatterR;
         currentScatterM = transmittance * currentDensity.y * gatheredScatterM;
@@ -388,4 +411,109 @@ void MultipleScatterLUT(uint3 id : SV_DispatchThreadID)
 	
     _SkyboxLUT2[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
 	_SkyboxLUT[id.xyz] += float4(scattering.rayleigh.xyz, scattering.mie.x);
+}
+
+//-----------------------------------------------------------------------------------------
+// GatherSum
+//-----------------------------------------------------------------------------------------
+void GatherSum(out float3 scatterR, out float3 scatterM, float2 coords)
+{
+	float4 gathered = _GatherSumLUT.SampleLevel(LinearClampSampler, coords, 0.0);
+	scatterR = gathered.xyz;
+	ApproximateMieFromRayleigh(gathered, scatterM);
+}
+
+//-----------------------------------------------------------------------------------------
+// ComputeAerialPerspInscatterAndTransmittance
+//-----------------------------------------------------------------------------------------
+void ComputeAerialPerspInscatterAndTransmittance(float3 rayStart, float3 rayDir, float rayLength, float3 planetCenter, float3 lightDir, uint3 coords, uint sampleCount)
+{
+	float stepSize = length(rayDir * rayLength) / (sampleCount - 1)*3;
+
+	float height = length(rayStart - planetCenter) - _PlanetRadius;
+	float cos_s = dot(normalize(rayStart - planetCenter), -lightDir);
+
+	float2 gatherUV;
+	gatherUV.x = ParamHeight(height);
+	gatherUV.y = ParamSunDirection(cos_s);
+
+	float3 transmittance;
+	float2 previousDensity, currentDensity, totalDensity;
+	float3 previousScatterR, currentScatterR, totalScatterR;
+	float3 previousScatterM, currentScatterM, totalScatterM;
+	float3 gatheredR, gatheredM;
+	float3 coef = 1.0 / (4.0 * PI);
+
+	previousDensity = exp(-(height.xx / _DensityScaleHeight.xy));
+
+	GatherSum(gatheredR, gatheredM, gatherUV);
+	previousScatterR = previousDensity.x * gatheredR;
+	previousScatterM = previousDensity.y * gatheredM;
+
+	_InscatteringLUT[coords] = float4(0, 0, 0, 1);
+	_ExtinctionLUT[coords] = float4(1, 1, 1, 1);
+
+	[loop]
+	for (coords.z = 1; coords.z < sampleCount; coords.z += 1)
+	{
+		float3 p = rayStart + coords.z * stepSize * rayDir;
+
+		height = length(p - planetCenter) - _PlanetRadius;
+		cos_s = dot(normalize(p - planetCenter), -lightDir);
+
+		gatherUV.x = ParamHeight(height);
+		gatherUV.y = ParamSunDirection(cos_s);
+		GatherSum(gatheredR, gatheredM, gatherUV);
+
+		currentDensity = exp(-(height.xx / _DensityScaleHeight.xy));
+		totalDensity += (currentDensity + previousDensity) / 2.0 * stepSize;
+
+		transmittance = exp(-(totalDensity.x * _ExtinctionR.xyz + totalDensity.y * _ExtinctionM.xyz));
+
+		currentScatterR = gatheredR * transmittance * currentDensity.x;
+		currentScatterM = gatheredM * transmittance * currentDensity.y;
+
+		totalScatterR += (previousScatterR + currentScatterR) / 2.0 * stepSize;
+		totalScatterM += (previousScatterM + currentScatterM) / 2.0 * stepSize;
+
+		previousDensity = currentDensity;
+		previousScatterR = currentScatterR;
+		previousScatterM = currentScatterM;
+
+		float3 inscatterR = totalScatterR;
+		float3 inscatterM = totalScatterM;
+
+		inscatterR *= _ScatteringR.xyz * coef;
+		inscatterM *= _ScatteringM.xyz * coef;
+		ApplyPhaseFunctionElek(inscatterR, inscatterM, dot(rayDir, -lightDir.xyz));
+
+		_InscatteringLUT[coords] = float4(inscatterR + inscatterM, 1.0);
+		_ExtinctionLUT[coords] = float4(transmittance, 1.0);
+	}
+}
+
+//-----------------------------------------------------------------------------------------
+// AerialPerspLUT
+//-----------------------------------------------------------------------------------------
+[numthreads(1, 1, 1)]
+void AerialPerspLUT(uint3 id : SV_DispatchThreadID)
+{
+	float w, h, d;
+	_InscatteringLUT.GetDimensions(w, h, d);
+
+	float2 coords = float2(id.x / (w - 1), id.y / (h - 1));
+
+	float3 v1 = lerp(_BottomLeftCorner.xyz, _BottomRightCorner.xyz, coords.x);
+	float3 v2 = lerp(_TopLeftCorner.xyz, _TopRightCorner.xyz, coords.x);
+
+	float3 rayEnd = lerp(v1, v2, coords.y);
+	float3 rayStart = _CameraPos.xyz;
+
+	float3 rayDir = rayEnd - rayStart;
+	float rayLength = length(rayDir);
+	rayDir /= rayLength;
+
+	float3 planetCenter = float3(0, -_PlanetRadius, 0);
+
+	ComputeAerialPerspInscatterAndTransmittance(rayStart, rayDir, rayLength, planetCenter, normalize(_LightDir.xyz), id, d);
 }

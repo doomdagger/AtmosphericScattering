@@ -16,6 +16,11 @@ sampler3D _SkyboxLUT;
 sampler3D _SkyboxLUT2;
 sampler3D _SkyboxLUTSingle;
 
+sampler3D _InscatteringLUT;
+sampler3D _ExtinctionLUT;
+
+float4 _FrustumCorners[4];
+
 //-----------------------------------------------------------------------------------------
 // InvParamHeight
 //-----------------------------------------------------------------------------------------

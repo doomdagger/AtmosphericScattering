@@ -61,11 +61,16 @@ public class AtmosphericScattering : MonoBehaviour
 
     private Vector3 _skyboxLUTSize = new Vector3(32, 128, 32);
 
+    private Vector3 _inscatteringLUTSize = new Vector3(8, 8, 128);
+    private RenderTexture _inscatteringLUT;
+    private RenderTexture _extinctionLUT;
+
     private RenderTexture _skyboxLUT;
     private RenderTexture _skyboxLUT2;
     private RenderTexture _skyboxLUTSingle;
 
 	private Material _frostbiteMat;
+
     private Camera _camera;
 
     [Range(1, 64)]
@@ -118,6 +123,10 @@ public class AtmosphericScattering : MonoBehaviour
     private readonly Vector4 MieSct = new Vector4(5.0f, 5.0f, 5.0f, 0.0f) * 0.000001f;
     private readonly Vector4 OzoneExt = new Vector4(3.426f, 8.298f, 0.356f, 0.0f) * 0.000001f;
 
+    private Vector4[] _FrustumCorners = new Vector4[4];
+
+    private bool AerialPerspPersisted = false;
+
     /// <summary>
     /// 
     /// </summary>
@@ -131,6 +140,8 @@ public class AtmosphericScattering : MonoBehaviour
         _camera = GetComponent<Camera>();
 
         CalculateAtmosphere();
+
+        InitializeAerialPerspLUTs();
     }
 
 #if UNITY_EDITOR
@@ -167,6 +178,23 @@ public class AtmosphericScattering : MonoBehaviour
         PrecomputeMultipleSkyboxLUT(2);
         PrecomputeMultipleGatherSum();
         PrecomputeMultipleSkyboxLUT(3);
+    }
+
+    private void InitializeAerialPerspLUTs()
+    {
+        _inscatteringLUT = new RenderTexture((int)_inscatteringLUTSize.x, (int)_inscatteringLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        _inscatteringLUT.volumeDepth = (int)_inscatteringLUTSize.z;
+        _inscatteringLUT.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
+        _inscatteringLUT.enableRandomWrite = true;
+        _inscatteringLUT.name = "InscatteringLUT";
+        _inscatteringLUT.Create();
+
+        _extinctionLUT = new RenderTexture((int)_inscatteringLUTSize.x, (int)_inscatteringLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        _extinctionLUT.volumeDepth = (int)_inscatteringLUTSize.z;
+        _extinctionLUT.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
+        _extinctionLUT.enableRandomWrite = true;
+        _extinctionLUT.name = "ExtinctionLUT";
+        _extinctionLUT.Create();
     }
 
     /// <summary>
@@ -352,6 +380,53 @@ public class AtmosphericScattering : MonoBehaviour
         }
     }
 
+    private void UpdateAerialPerspParameters()
+    {
+        // bottom left
+        _FrustumCorners[0] = _camera.ViewportToWorldPoint(new Vector3(0, 0, _camera.farClipPlane));
+        // top left
+        _FrustumCorners[1] = _camera.ViewportToWorldPoint(new Vector3(0, 1, _camera.farClipPlane));
+        // top right
+        _FrustumCorners[2] = _camera.ViewportToWorldPoint(new Vector3(1, 1, _camera.farClipPlane));
+        // bottom right
+        _FrustumCorners[3] = _camera.ViewportToWorldPoint(new Vector3(1, 0, _camera.farClipPlane));
+
+        // Compute Shader
+        int kernel = ScatteringComputeShader.FindKernel("AerialPerspLUT");
+
+        ScatteringComputeShader.SetTexture(kernel, "_InscatteringLUT", _inscatteringLUT);
+        ScatteringComputeShader.SetTexture(kernel, "_ExtinctionLUT", _extinctionLUT);
+        ScatteringComputeShader.SetTexture(kernel, "_GatherSumLUT", _gatherSumLUT);
+
+        ScatteringComputeShader.SetVector("_InscatteringLUTSize", _inscatteringLUTSize);
+
+        ScatteringComputeShader.SetVector("_BottomLeftCorner", _FrustumCorners[0]);
+        ScatteringComputeShader.SetVector("_TopLeftCorner", _FrustumCorners[1]);
+        ScatteringComputeShader.SetVector("_TopRightCorner", _FrustumCorners[2]);
+        ScatteringComputeShader.SetVector("_BottomRightCorner", _FrustumCorners[3]);
+
+        ScatteringComputeShader.SetVector("_CameraPos", transform.position);
+        ScatteringComputeShader.SetVector("_LightDir", Sun.transform.forward);
+        ScatteringComputeShader.SetVector("_LightColor", Sun.color * Sun.intensity);
+
+        UpdateCommonComputeShaderParameters(kernel);
+
+        ScatteringComputeShader.Dispatch(kernel, (int)_inscatteringLUTSize.x, (int)_inscatteringLUTSize.y, 1);
+
+        if (!AerialPerspPersisted)
+        {
+            SaveTextureAsKTX(_inscatteringLUT, "apinscatter", true);
+            SaveTextureAsKTX(_extinctionLUT, "apextinction", true);
+            AerialPerspPersisted = true;
+        }
+
+        // Postproess Shader
+        _frostbiteMat.SetTexture("_InscatteringLUT", _inscatteringLUT);
+        _frostbiteMat.SetTexture("_ExtinctionLUT", _extinctionLUT);
+        _frostbiteMat.SetVectorArray("_FrustumCorners", _FrustumCorners);
+        UpdateMaterialParameters(_frostbiteMat);
+    } 
+
     /// <summary>
     /// 
     /// </summary>
@@ -374,9 +449,22 @@ public class AtmosphericScattering : MonoBehaviour
     public void OnPreRender()
     {
         UpdateSkyBoxParameters();
+        UpdateAerialPerspParameters();
     }
 
-	Texture2D ToTexture2D(RenderTexture rTex)
+    /// <summary>
+    /// 
+    /// </summary>
+    [ImageEffectOpaque]
+    public void OnRenderImage(RenderTexture source, RenderTexture destination)
+    {
+        _frostbiteMat.SetTexture("_Background", source);
+
+        Texture nullTexture = null;
+        Graphics.Blit(nullTexture, destination, _frostbiteMat, 3);
+    }
+
+    Texture2D ToTexture2D(RenderTexture rTex)
 	{
 		Texture2D tex = new Texture2D(rTex.width, rTex.height, TextureFormat.RGBAHalf, false);
 		RenderTexture.active = rTex;
