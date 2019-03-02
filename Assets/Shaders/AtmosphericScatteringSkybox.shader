@@ -89,24 +89,17 @@ Shader "Skybox/AtmosphericScattering"
 				float sunZenith = dot(normal, -lightDir);
 				float3 coords = float3(ParamHeight(height), ParamViewDirection(viewZenith, height), ParamSunDirection(sunZenith));
 
-				float3 lightInscatter = 0;
-
-				// first order
 				float4 scatterR = 0;
 				float4 scatterM = 0;
-				scatterR = tex3D(_SkyboxLUT, coords);		
+#ifdef ATMOSPHERE_REFERENCE
+				scatterR = tex3D(_SkyboxLUTSingle, coords);
+#else
+				scatterR = tex3D(_SkyboxLUT, coords);
+#endif
 				ApproximateMieFromRayleigh(scatterR, scatterM.xyz);
 				ApplyPhaseFunctionElek(scatterR.xyz, scatterM.xyz, dot(rayDir, -lightDir.xyz));
-				lightInscatter += scatterR + scatterM;
 
-				// second order
-				float4 scatterR2 = 0;
-				float4 scatterM2 = 0;
-				scatterR2 = tex3D(_SkyboxLUT2, coords);
-				ApproximateMieFromRayleigh(scatterR2, scatterM2.xyz);
-				//ApplyPhaseFunctionElek(scatterR2.xyz, scatterM2.xyz, dot(rayDir, -lightDir.xyz));
-				
-				//lightInscatter += max(scatterR2.xyz + scatterM2.xyz, 0.0);
+				float3 lightInscatter = scatterR + scatterM;
 
 				return float4(max(0, lightInscatter), 1);
 			}

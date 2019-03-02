@@ -2,17 +2,19 @@
 
 float _AtmosphereHeight;
 float _PlanetRadius;
-float2 _DensityScaleHeight;
+float4 _DensityScaleHeight;
 
 float3 _ScatteringR;
 float3 _ScatteringM;
 float3 _ExtinctionR;
 float3 _ExtinctionM;
+float3 _ExtinctionO;
 
 float _MieG;
 
 sampler3D _SkyboxLUT;
 sampler3D _SkyboxLUT2;
+sampler3D _SkyboxLUTSingle;
 
 //-----------------------------------------------------------------------------------------
 // InvParamHeight
@@ -115,7 +117,7 @@ void ApplyPhaseFunctionElek(inout float3 scatterR, inout float3 scatterM, float 
 	scatterM *= phase;
 }
 
-void ApproximateMieFromRayleigh(in float4 scatterR, out float3 scatterM)
+void ApproximateMieFromRayleigh(in float4 scatterR, inout float3 scatterM)
 {
     scatterM.xyz = scatterR.xyz * ((scatterR.w) / (scatterR.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM / _ScatteringR);
 }
@@ -145,8 +147,8 @@ half4 PrecomputeTransmittance(float height, float3 rayDir)
 	intersection = RaySphereIntersection(rayStart, rayDir, planetCenter, _PlanetRadius + _AtmosphereHeight);
     rayLength = intersection.y;
 
-	float2 currentDensity, previousDensity, totalDensity;
-	previousDensity = exp(-(height.xx / _DensityScaleHeight));
+	float3 currentDensity, previousDensity, totalDensity;
+	previousDensity = exp(-(height.xxx / _DensityScaleHeight.xyz));
 
 	float stepSize = length(rayLength * rayDir) / stepCount;
 	for (int step = 1; step <= stepCount; step+=1)
@@ -155,14 +157,14 @@ half4 PrecomputeTransmittance(float height, float3 rayDir)
 
 		height = abs(length(position - planetCenter) - _PlanetRadius);
 
-		currentDensity = exp(-(height.xx / _DensityScaleHeight));
+		currentDensity = exp(-(height.xxx / _DensityScaleHeight.xyz));
 		totalDensity += (previousDensity + currentDensity) / 2.0 * stepSize;
 
 		previousDensity = currentDensity;
 	}
 
 	half4 transmittance = 1;
-	transmittance.xyz = exp(-(totalDensity.x * _ExtinctionR + totalDensity.y * _ExtinctionM));
+	transmittance.xyz = exp(-(totalDensity.x * _ExtinctionR + totalDensity.y * _ExtinctionM + totalDensity.z * _ExtinctionO));
 
 	return transmittance;
 }
@@ -171,7 +173,7 @@ half4 PrecomputeTransmittance(float height, float3 rayDir)
 //-----------------------------------------------------------------------------------------
 // PrecomputeGatherSum
 //-----------------------------------------------------------------------------------------
-half4 PrecomputeGatherSum(float2 coords)
+half4 PrecomputeGatherSum(float2 coords, int multiple)
 {
     float stepCount = 64;
     float stepSize = (2.0 * PI) / stepCount;
@@ -179,12 +181,12 @@ half4 PrecomputeGatherSum(float2 coords)
     float height = InvParamHeight(coords.x);
     float cos_s = InvParamSunDirection(coords.y);
 
-    float3 sunDir = GetDirectionFromCos(cos_s);
     float3 viewDir;
+	float3 sunDir = GetDirectionFromCos(cos_s);
 
     float4 gathered = 0;
     float4 scatterR;
-    float3 scatterM;
+	float3 scatterM;
 
     for (int step = 0; step <= stepCount; step+=1)
     {
@@ -192,13 +194,20 @@ half4 PrecomputeGatherSum(float2 coords)
         viewDir = GetDirectionFromCos(cos_v);
         float u_v = ParamViewDirection(cos_v, height);
 
-        scatterR = tex3D(_SkyboxLUT, float3(coords.x, u_v, coords.y));
-        ApproximateMieFromRayleigh(scatterR, scatterM);
+		if (multiple == 1)
+		{
+			scatterR = tex3D(_SkyboxLUT2, float3(coords.x, u_v, coords.y));
+		}
+		else
+		{
+			scatterR = tex3D(_SkyboxLUT, float3(coords.x, u_v, coords.y));
+		}
+		ApproximateMieFromRayleigh(scatterR, scatterM);
         ApplyPhaseFunctionElek(scatterR.xyz, scatterM, dot(viewDir, sunDir));
-        gathered.xyz += (scatterR.xyz + scatterM);
+        
+		gathered += float4(scatterR.xyz, scatterM.x);
     }
 
     gathered *= 4.0 * PI / stepCount;
-    gathered.a = 1.0;
     return gathered;
 }

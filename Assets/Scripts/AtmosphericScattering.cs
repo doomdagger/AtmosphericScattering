@@ -57,11 +57,13 @@ public class AtmosphericScattering : MonoBehaviour
 
 	private RenderTexture _transmittanceLUT = null;
     private RenderTexture _gatherSumLUT = null;
+    private RenderTexture _gatherSumLUT2 = null;
 
     private Vector3 _skyboxLUTSize = new Vector3(32, 128, 32);
 
     private RenderTexture _skyboxLUT;
     private RenderTexture _skyboxLUT2;
+    private RenderTexture _skyboxLUTSingle;
 
 	private Material _frostbiteMat;
     private Camera _camera;
@@ -111,9 +113,10 @@ public class AtmosphericScattering : MonoBehaviour
 
     private const float AtmosphereHeight = 80000.0f;
     private const float PlanetRadius = 6371000.0f;
-    private readonly Vector4 DensityScale = new Vector4(7994.0f, 1200.0f, 0, 0);
+    private readonly Vector4 DensityScale = new Vector4(8000.0f, 1200.0f, 8000.0f, 0);
     private readonly Vector4 RayleighSct = new Vector4(5.8f, 13.5f, 33.1f, 0.0f) * 0.000001f;
     private readonly Vector4 MieSct = new Vector4(5.0f, 5.0f, 5.0f, 0.0f) * 0.000001f;
+    private readonly Vector4 OzoneExt = new Vector4(3.426f, 8.298f, 0.356f, 0.0f) * 0.000001f;
 
     /// <summary>
     /// 
@@ -160,8 +163,10 @@ public class AtmosphericScattering : MonoBehaviour
 
         PrecomputeTransmittance();
         PrecomputeSkyboxLUT();
-        //PrecomputeGatherSum();
-        PrecomputeSkyboxLUT2();
+        PrecomputeGatherSum();
+        PrecomputeMultipleSkyboxLUT(2);
+        PrecomputeMultipleGatherSum();
+        PrecomputeMultipleSkyboxLUT(3);
     }
 
     /// <summary>
@@ -179,15 +184,26 @@ public class AtmosphericScattering : MonoBehaviour
             _skyboxLUT.Create();
         }
 
+        if (_skyboxLUTSingle == null)
+        {
+            _skyboxLUTSingle = new RenderTexture((int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _skyboxLUTSingle.volumeDepth = (int)_skyboxLUTSize.z;
+            _skyboxLUTSingle.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
+            _skyboxLUTSingle.enableRandomWrite = true;
+            _skyboxLUTSingle.name = "SkyboxLUTSingle";
+            _skyboxLUTSingle.Create();
+        }
+
         int kernel = ScatteringComputeShader.FindKernel("SkyboxLUT");
         ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT", _skyboxLUT);
+        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUTSingle", _skyboxLUTSingle);
         UpdateCommonComputeShaderParameters(kernel);
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
         SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
     }
 
-    private void PrecomputeSkyboxLUT2()
+    private void PrecomputeMultipleSkyboxLUT(int order)
     {
         if (_skyboxLUT2 == null)
         {
@@ -200,11 +216,20 @@ public class AtmosphericScattering : MonoBehaviour
         }
 
         int kernel = ScatteringComputeShader.FindKernel("MultipleScatterLUT");
-        ScatteringComputeShader.SetTexture(kernel, "_SkyboxTex", _skyboxLUT);
-        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT2", _skyboxLUT2);
+        if (order == 2)
+        {
+            ScatteringComputeShader.SetTexture(kernel, "_GatherSumLUT2", _gatherSumLUT); // gather sum of first order
+        }
+        else
+        {
+            ScatteringComputeShader.SetTexture(kernel, "_GatherSumLUT2", _gatherSumLUT2); // gather sum of previous order
+        }
+        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT", _skyboxLUT); // cumulative scattering lut
+        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT2", _skyboxLUT2); // current write to
         UpdateCommonComputeShaderParameters(kernel);
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
+        SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
         SaveTextureAsKTX(_skyboxLUT2, "skyboxlut2", true);
     }
 
@@ -249,6 +274,7 @@ public class AtmosphericScattering : MonoBehaviour
 		material.SetVector("_ScatteringM", MieSct * MieScatterCoef);
 		material.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
 		material.SetVector("_ExtinctionM", MieSct * MieExtinctionCoef);
+        material.SetVector("_ExtinctionO", OzoneExt);
 
 		material.SetFloat("_MieG", MieG);
 
@@ -256,8 +282,9 @@ public class AtmosphericScattering : MonoBehaviour
 		material.SetVector("_LightColor", Sun.color * Sun.intensity);
 
 		material.SetTexture("_SkyboxLUT", _skyboxLUT);
-		material.SetTexture("_SkyboxLUT2", _skyboxLUT2);
-	}
+        material.SetTexture("_SkyboxLUT2", _skyboxLUT2);
+        material.SetTexture("_SkyboxLUTSingle", _skyboxLUTSingle);
+    }
 
     /// <summary>
     /// 
@@ -338,6 +365,24 @@ public class AtmosphericScattering : MonoBehaviour
         Graphics.Blit(nullTexture, _gatherSumLUT, _frostbiteMat, 1);
 
         SaveTextureAsKTX(_gatherSumLUT, "gathersum");
+    }
+
+    private void PrecomputeMultipleGatherSum()
+    {
+        if (_gatherSumLUT2 == null)
+        {
+            _gatherSumLUT2 = new RenderTexture(32, 32, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _gatherSumLUT2.name = "GatherSumLUT2";
+            _gatherSumLUT2.filterMode = FilterMode.Bilinear;
+            _gatherSumLUT2.Create();
+        }
+
+        _frostbiteMat.SetTexture("_SkyboxLUT2", _skyboxLUT2);
+
+        Texture nullTexture = null;
+        Graphics.Blit(nullTexture, _gatherSumLUT2, _frostbiteMat, 2);
+
+        SaveTextureAsKTX(_gatherSumLUT2, "gathersum2");
     }
 
     public void SaveTextureAsKTX(RenderTexture rtex, String name, bool tile3D = false)

@@ -30,8 +30,9 @@
 
 RWTexture3D<float4> _SkyboxLUT;
 RWTexture3D<float4> _SkyboxLUT2;
+RWTexture3D<float4> _SkyboxLUTSingle;
 
-Texture3D<half4> _SkyboxTex;
+Texture2D<half4> _GatherSumLUT2;
 Texture2D<half4> _TransmittanceLUT;
 
 SamplerState PointClampSampler;
@@ -246,8 +247,8 @@ ScatteringOutput IntegrateInscattering(float3 rayStart, float3 rayDir, float ray
     // Attention: should apply Phase Function after Mie approximation!
     // ApplyPhaseFunctionElek(totalScatterR, totalScatterM, dot(-lightDir, rayDir));
 
-	output.rayleigh = totalScatterR;
-	output.mie = totalScatterM;
+	output.rayleigh = max(totalScatterR, 0);
+	output.mie = max(totalScatterM, 0);
 
 	return output;
 }
@@ -272,6 +273,7 @@ void SkyboxLUT(uint3 id : SV_DispatchThreadID)
 	ScatteringOutput scattering = IntegrateInscattering(rayStart, rayDir, rayLength, planetCenter, lightDir, height);
 	
 	_SkyboxLUT[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
+	_SkyboxLUTSingle[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
 }
 
 
@@ -294,33 +296,11 @@ void ApproximateMieFromRayleigh(in float4 scatterR, out float3 scatterM)
 //-----------------------------------------------------------------------------------------
 // GatherSum
 //-----------------------------------------------------------------------------------------
-void GatherSum(float3 lightDir, float3 rayDir, float height, float3 coords, out float3 gatherScatterR, out float3 gatherScatterM)
+void GatherSum(out float3 scatterR, out float3 scatterM, float2 coords)
 {
-    float stepCount = 32;
-    float stepSize = (2.0 * PI) / stepCount;
-    
-    float4 scatterR;
-    float3 scatterM;
-
-    float3 lastRayDir;
-
-    for (int step = 0; step <= stepCount; step += 1)
-    {
-        float cos_v = cos(step * stepSize);
-        lastRayDir = GetDirectionFromCos(cos_v);
-        coords.y = ParamViewDirection(cos_v, height);
-
-        scatterR = _SkyboxTex.SampleLevel(LinearClampSampler, coords, 0.0).rgba;
-        ApproximateMieFromRayleigh(scatterR, scatterM);
-        ApplyPhaseFunctionElek(scatterR.xyz, scatterM, dot(-lightDir, lastRayDir)); // from first to second
-        ApplyPhaseFunctionElek(scatterR.xyz, scatterM, dot(lastRayDir, rayDir)); // from second to current
-        
-        gatherScatterR += scatterR.xyz;
-        gatherScatterM += scatterM.xyz;
-    }
-
-    gatherScatterR *= 4.0 * PI / stepCount;
-    gatherScatterM *= 4.0 * PI / stepCount;
+	float4 gathered = _GatherSumLUT2.SampleLevel(LinearClampSampler, coords, 0.0);
+	scatterR = gathered.xyz;
+	ApproximateMieFromRayleigh(gathered, scatterM);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -339,7 +319,7 @@ ScatteringOutput IntegrateMultiScattering(float3 rayStart, float3 rayDir, float 
     float3 transmittance;
     previousDensity = exp(-(height.xx / _DensityScaleHeight.xy));
 
-    GatherSum(lightDir, rayDir, height, coords, gatheredScatterR, gatheredScatterM);
+    GatherSum(gatheredScatterR, gatheredScatterM, coords.xz);
 
     previousScatterR = previousDensity.x * gatheredScatterR;
     previousScatterM = previousDensity.y * gatheredScatterM;
@@ -359,7 +339,7 @@ ScatteringOutput IntegrateMultiScattering(float3 rayStart, float3 rayDir, float 
 
         transmittance = exp(-(totalDensity.x * _ExtinctionR.xyz + totalDensity.y * _ExtinctionM.xyz));
 
-        GatherSum(lightDir, rayDir, height, coords, gatheredScatterR, gatheredScatterM);
+		GatherSum(gatheredScatterR, gatheredScatterM, coords.xz);
 
         currentScatterR = transmittance * currentDensity.x * gatheredScatterR;
         currentScatterM = transmittance * currentDensity.y * gatheredScatterM;
@@ -381,8 +361,8 @@ ScatteringOutput IntegrateMultiScattering(float3 rayStart, float3 rayDir, float 
 
     // Attention: should apply Phase Function after Mie approximation!
 
-    output.rayleigh = totalScatterR;
-    output.mie = totalScatterM;
+    output.rayleigh = max(totalScatterR, 0.0);
+    output.mie = max(totalScatterM, 0.0);
 
     return output;
 }
@@ -407,4 +387,5 @@ void MultipleScatterLUT(uint3 id : SV_DispatchThreadID)
     ScatteringOutput scattering = IntegrateMultiScattering(rayStart, rayDir, rayLength, planetCenter, lightDir, height, coords);
 	
     _SkyboxLUT2[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
+	_SkyboxLUT[id.xyz] += float4(scattering.rayleigh.xyz, scattering.mie.x);
 }
