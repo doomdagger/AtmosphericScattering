@@ -935,7 +935,7 @@ Transform:
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 1942086264}
   m_LocalRotation: {x: -0.12265456, y: -0.33909407, z: -0.044642597, w: 0.9316535}
-  m_LocalPosition: {x: 1832, y: 270, z: -900}
+  m_LocalPosition: {x: 2721, y: 270, z: -2044}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 1819247351}
@@ -965,9 +965,9 @@ MonoBehaviour:
   IncomingLight: {r: 4.691, g: 4.691, b: 4.691, a: 1}
   RayleighScatterCoef: 1
   RayleighExtinctionCoef: 1
-  MieScatterCoef: 1
+  MieScatterCoef: 3
   MieExtinctionCoef: 1
-  MieG: 0.624
+  MieG: 0.407
   DistanceScale: 3
   UpdateLightColor: 1
   LightColorIntensity: 1
