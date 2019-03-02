@@ -173,11 +173,14 @@ public class AtmosphericScattering : MonoBehaviour
         UpdateMaterialParameters(_frostbiteMat);
 
         PrecomputeTransmittance();
-        PrecomputeSkyboxLUT();
-        PrecomputeGatherSum();
-        PrecomputeMultipleSkyboxLUT(2);
-        PrecomputeMultipleGatherSum();
-        PrecomputeMultipleSkyboxLUT(3);
+        PrecomputeSkyboxLUT(); // gen lut 1k
+        PrecomputeGatherSum(); // gather sum 1k
+        PrecomputeMultipleSkyboxLUT(2); // use sum 1k to gen lut 2k
+        PrecomputeMultipleGatherSum(); // gather sum 2k
+        PrecomputeGatherSumAllTogether(); // add sum 2k into 1k
+        PrecomputeMultipleSkyboxLUT(3); // use sum 2k to gen lut 3k
+        PrecomputeMultipleGatherSum(); // gather sum 3k
+        PrecomputeGatherSumAllTogether(); // add sum 3k into 1k
     }
 
     private void InitializeAerialPerspLUTs()
@@ -317,6 +320,27 @@ public class AtmosphericScattering : MonoBehaviour
         Graphics.Blit(nullTexture, _gatherSumLUT2, _frostbiteMat, 2);
 
         SaveTextureAsKTX(_gatherSumLUT2, "gathersum2");
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    private void PrecomputeGatherSumAllTogether()
+    {
+        Texture2D sum = ToTexture2D(_gatherSumLUT);
+        Texture2D korder = ToTexture2D(_gatherSumLUT2);
+
+        Color[] sumColors = sum.GetPixels();
+        Color[] korderColors = korder.GetPixels();
+
+        for (int i = 0; i < sumColors.Length; ++i)
+        {
+            sumColors[i] += korderColors[i];
+        }
+        sum.SetPixels(sumColors);
+        Graphics.Blit(sum, _gatherSumLUT);
+
+        SaveTextureAsKTX(_gatherSumLUT, "gathersum");
     }
 
     /// <summary>
