@@ -234,117 +234,23 @@ public class AtmosphericScattering : MonoBehaviour
     }
 
     /// <summary>
-    /// 
-    /// </summary>
-    private void UpdateCommonComputeShaderParameters(int kernel)
-    {
-        ScatteringComputeShader.SetTexture(kernel, "_TransmittanceLUT", _transmittanceLUT);
-
-        ScatteringComputeShader.SetFloat("_AtmosphereHeight", AtmosphereHeight);
-        ScatteringComputeShader.SetFloat("_PlanetRadius", PlanetRadius);
-        ScatteringComputeShader.SetVector("_DensityScaleHeight", DensityScale);
-
-        ScatteringComputeShader.SetVector("_ScatteringR", RayleighSct * RayleighScatterCoef);
-        ScatteringComputeShader.SetVector("_ScatteringM", MieSct * MieScatterCoef);
-        ScatteringComputeShader.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
-        ScatteringComputeShader.SetVector("_ExtinctionM", MieSct * MieExtinctionCoef);
-
-        ScatteringComputeShader.SetVector("_LightColor", Sun.color * Sun.intensity);
-        ScatteringComputeShader.SetFloat("_MieG", MieG);
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    public void OnDestroy()
-    {
-		Destroy (_frostbiteMat);
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    private void UpdateMaterialParameters(Material material)
-	{
-		material.SetFloat("_AtmosphereHeight", AtmosphereHeight);
-		material.SetFloat("_PlanetRadius", PlanetRadius);
-		material.SetVector("_DensityScaleHeight", DensityScale);
-
-		material.SetVector("_ScatteringR", RayleighSct * RayleighScatterCoef);
-		material.SetVector("_ScatteringM", MieSct * MieScatterCoef);
-		material.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
-		material.SetVector("_ExtinctionM", MieSct * MieExtinctionCoef);
-        material.SetVector("_ExtinctionO", OzoneExt);
-
-		material.SetFloat("_MieG", MieG);
-
-		material.SetVector("_LightDir", new Vector4(Sun.transform.forward.x, Sun.transform.forward.y, Sun.transform.forward.z, 1.0f / (Sun.range * Sun.range)));
-		material.SetVector("_LightColor", Sun.color * Sun.intensity);
-
-		material.SetTexture("_SkyboxLUT", _skyboxLUT);
-        material.SetTexture("_SkyboxLUT2", _skyboxLUT2);
-        material.SetTexture("_SkyboxLUTSingle", _skyboxLUTSingle);
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    void Update()
-    {
-
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    private void UpdateSkyBoxParameters()
-    {
-        if (RenderSettings.skybox != null)
-        {
-            RenderSettings.skybox.SetVector("_CameraPos", _camera.transform.position);
-            UpdateMaterialParameters(RenderSettings.skybox);
-            if (RenderingMode == RenderMode.Reference)
-                RenderSettings.skybox.EnableKeyword("ATMOSPHERE_REFERENCE");
-            else
-                RenderSettings.skybox.DisableKeyword("ATMOSPHERE_REFERENCE");
-        }
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    public void OnPreRender()
-    {
-        UpdateSkyBoxParameters();
-    }
-
-	Texture2D ToTexture2D(RenderTexture rTex)
-	{
-		Texture2D tex = new Texture2D(rTex.width, rTex.height, TextureFormat.RGBAHalf, false);
-		RenderTexture.active = rTex;
-		tex.ReadPixels(new Rect(0, 0, rTex.width, rTex.height), 0, 0);
-		tex.Apply();
-		return tex;
-	}
-
-	/// <summary>
 	/// 
 	/// </summary>
 	private void PrecomputeTransmittance()
-	{
-		if (_transmittanceLUT == null)
-		{
-			_transmittanceLUT = new RenderTexture(128, 32, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-			_transmittanceLUT.name = "TransmittanceLUT";
-			_transmittanceLUT.filterMode = FilterMode.Bilinear;
-			_transmittanceLUT.Create();
-		}
+    {
+        if (_transmittanceLUT == null)
+        {
+            _transmittanceLUT = new RenderTexture(128, 32, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _transmittanceLUT.name = "TransmittanceLUT";
+            _transmittanceLUT.filterMode = FilterMode.Bilinear;
+            _transmittanceLUT.Create();
+        }
 
-		Texture nullTexture = null;
-		Graphics.Blit(nullTexture, _transmittanceLUT, _frostbiteMat, 0);
+        Texture nullTexture = null;
+        Graphics.Blit(nullTexture, _transmittanceLUT, _frostbiteMat, 0);
 
         SaveTextureAsKTX(_transmittanceLUT, "transmittance");
-	}
+    }
 
     /// <summary>
     /// 
@@ -384,6 +290,100 @@ public class AtmosphericScattering : MonoBehaviour
 
         SaveTextureAsKTX(_gatherSumLUT2, "gathersum2");
     }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    private void UpdateCommonComputeShaderParameters(int kernel)
+    {
+        ScatteringComputeShader.SetTexture(kernel, "_TransmittanceLUT", _transmittanceLUT);
+
+        ScatteringComputeShader.SetFloat("_AtmosphereHeight", AtmosphereHeight);
+        ScatteringComputeShader.SetFloat("_PlanetRadius", PlanetRadius);
+        ScatteringComputeShader.SetVector("_DensityScaleHeight", DensityScale);
+
+        ScatteringComputeShader.SetVector("_ScatteringR", RayleighSct * RayleighScatterCoef);
+        ScatteringComputeShader.SetVector("_ScatteringM", MieSct * MieScatterCoef);
+        ScatteringComputeShader.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
+        ScatteringComputeShader.SetVector("_ExtinctionM", MieSct * MieExtinctionCoef);
+
+        ScatteringComputeShader.SetVector("_LightColor", Sun.color * Sun.intensity);
+        ScatteringComputeShader.SetFloat("_MieG", MieG);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    private void UpdateMaterialParameters(Material material)
+    {
+        material.SetFloat("_AtmosphereHeight", AtmosphereHeight);
+        material.SetFloat("_PlanetRadius", PlanetRadius);
+        material.SetVector("_DensityScaleHeight", DensityScale);
+
+        material.SetVector("_ScatteringR", RayleighSct * RayleighScatterCoef);
+        material.SetVector("_ScatteringM", MieSct * MieScatterCoef);
+        material.SetVector("_ExtinctionR", RayleighSct * RayleighExtinctionCoef);
+        material.SetVector("_ExtinctionM", MieSct * MieExtinctionCoef);
+        material.SetVector("_ExtinctionO", OzoneExt);
+
+        material.SetFloat("_MieG", MieG);
+
+        material.SetVector("_LightDir", new Vector4(Sun.transform.forward.x, Sun.transform.forward.y, Sun.transform.forward.z, 1.0f / (Sun.range * Sun.range)));
+        material.SetVector("_LightColor", Sun.color * Sun.intensity);
+
+        material.SetTexture("_SkyboxLUT", _skyboxLUT);
+        material.SetTexture("_SkyboxLUT2", _skyboxLUT2);
+        material.SetTexture("_SkyboxLUTSingle", _skyboxLUTSingle);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    private void UpdateSkyBoxParameters()
+    {
+        if (RenderSettings.skybox != null)
+        {
+            RenderSettings.skybox.SetVector("_CameraPos", _camera.transform.position);
+            UpdateMaterialParameters(RenderSettings.skybox);
+            if (RenderingMode == RenderMode.Reference)
+                RenderSettings.skybox.EnableKeyword("ATMOSPHERE_REFERENCE");
+            else
+                RenderSettings.skybox.DisableKeyword("ATMOSPHERE_REFERENCE");
+        }
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public void OnDestroy()
+    {
+		Destroy (_frostbiteMat);
+    }
+
+       /// <summary>
+    /// 
+    /// </summary>
+    void Update()
+    {
+
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public void OnPreRender()
+    {
+        UpdateSkyBoxParameters();
+    }
+
+	Texture2D ToTexture2D(RenderTexture rTex)
+	{
+		Texture2D tex = new Texture2D(rTex.width, rTex.height, TextureFormat.RGBAHalf, false);
+		RenderTexture.active = rTex;
+		tex.ReadPixels(new Rect(0, 0, rTex.width, rTex.height), 0, 0);
+		tex.Apply();
+		return tex;
+	}
 
     public void SaveTextureAsKTX(RenderTexture rtex, String name, bool tile3D = false)
     {
