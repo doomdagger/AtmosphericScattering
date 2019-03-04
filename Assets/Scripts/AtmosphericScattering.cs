@@ -124,6 +124,7 @@ public class AtmosphericScattering : MonoBehaviour
     private readonly Vector4 OzoneExt = new Vector4(3.426f, 8.298f, 0.356f, 0.0f) * 0.000001f;
 
     private Vector4[] _FrustumCorners = new Vector4[4];
+    public float SunIlluminance = 120000;
 
     private bool AerialPerspPersisted = false;
 
@@ -368,6 +369,8 @@ public class AtmosphericScattering : MonoBehaviour
     /// </summary>
     private void UpdateMaterialParameters(Material material)
     {
+        material.SetTexture("_TransmittanceLUT", _transmittanceLUT);
+
         material.SetFloat("_AtmosphereHeight", AtmosphereHeight);
         material.SetFloat("_PlanetRadius", PlanetRadius);
         material.SetVector("_DensityScaleHeight", DensityScale);
@@ -382,6 +385,7 @@ public class AtmosphericScattering : MonoBehaviour
 
         material.SetVector("_LightDir", new Vector4(Sun.transform.forward.x, Sun.transform.forward.y, Sun.transform.forward.z, 1.0f / (Sun.range * Sun.range)));
         material.SetVector("_LightColor", Sun.color * Sun.intensity);
+        material.SetFloat("_SunIlluminance", SunIlluminance);
 
         material.SetTexture("_SkyboxLUT", _skyboxLUT);
         material.SetTexture("_SkyboxLUT2", _skyboxLUT2);

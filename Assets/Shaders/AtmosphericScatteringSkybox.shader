@@ -101,7 +101,25 @@ Shader "Skybox/AtmosphericScattering"
 
 				float3 lightInscatter = scatterR + scatterM;
 
-				return float4(max(0, lightInscatter), 1);
+				//coords.xy = float2(ParamViewDirection(1.0, 0.0), ParamHeight(0.0));
+				//float3 transZenith = tex2D(_TransmittanceLUT, coords.xy).xyz;
+
+				//coords.xy = float2(ParamViewDirection(viewZenith, height), ParamHeight(height));
+				//float3 transCurrent = tex2D(_TransmittanceLUT, coords.xy).xyz;
+
+				//float sunAngularDiameter = 0.545 / 180.0 * PI * 2;
+				//if (dot(rayDir, -lightDir) > cos(sunAngularDiameter))
+				//{
+				//	float3 sunColor = _SunIlluminance / (2 * PI * (1 - cos(0.5 * (0.545 / 180 * PI))));
+				//	sunColor = transCurrent / transZenith * 100;
+
+				//	float centerToEdge = (dot(rayDir, -lightDir) - cos(sunAngularDiameter)) / (1.0 - cos(sunAngularDiameter));
+				//	SunLimbDarkening(centerToEdge, sunColor);
+
+				//	return float4(sunColor + lightInscatter, 1.0);
+				//}
+
+				return float4(lightInscatter, 1);
 			}
 			ENDCG
 		}

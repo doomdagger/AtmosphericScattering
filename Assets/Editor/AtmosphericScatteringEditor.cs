@@ -18,6 +18,7 @@ class AtmosphericScatteringEditor : Editor
     SerializedProperty Sun;
     SerializedProperty RenderAtmosphericFog;
     SerializedProperty IncomingLight;
+    SerializedProperty SunIlluminance;
     SerializedProperty RayleighScatterCoef;
     SerializedProperty MieScatterCoef;
     SerializedProperty MieG;
@@ -65,6 +66,7 @@ class AtmosphericScatteringEditor : Editor
         Sun = serializedObject.FindProperty("Sun");
         RenderAtmosphericFog = serializedObject.FindProperty("RenderAtmosphericFog");
         IncomingLight = serializedObject.FindProperty("IncomingLight");
+        SunIlluminance = serializedObject.FindProperty("SunIlluminance");
         RayleighScatterCoef = serializedObject.FindProperty("RayleighScatterCoef");
         MieScatterCoef = serializedObject.FindProperty("MieScatterCoef");
         MieG = serializedObject.FindProperty("MieG");
@@ -113,7 +115,8 @@ class AtmosphericScatteringEditor : Editor
         if (a.ScatteringFoldout)
         {
             RenderAtmosphericFog.boolValue = EditorGUILayout.Toggle("Render Atm Fog", RenderAtmosphericFog.boolValue);
-            IncomingLight.colorValue = EditorGUILayout.ColorField(new GUIContent("Incoming Light (*)"), IncomingLight.colorValue, false, false, true, new ColorPickerHDRConfig(0, 10, 0, 10));            
+            IncomingLight.colorValue = EditorGUILayout.ColorField(new GUIContent("Incoming Light (*)"), IncomingLight.colorValue, false, false, true, new ColorPickerHDRConfig(0, 10, 0, 10));
+            SunIlluminance.floatValue = EditorGUILayout.Slider("Sun Illuminance Ground Zenith", SunIlluminance.floatValue, 100000, 130000);
             RayleighScatterCoef.floatValue = EditorGUILayout.Slider("Rayleigh Coef (*)", RayleighScatterCoef.floatValue, 1, 10);
             MieScatterCoef.floatValue = EditorGUILayout.Slider("Mie Coef (*)", MieScatterCoef.floatValue, 1, 15);
             MieG.floatValue = EditorGUILayout.Slider("MieG", MieG.floatValue, 0, 0.999f);

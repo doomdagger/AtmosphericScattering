@@ -236,7 +236,7 @@ Light:
   serializedVersion: 8
   m_Type: 1
   m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
-  m_Intensity: 3
+  m_Intensity: 5
   m_Range: 10
   m_SpotAngle: 30
   m_CookieSize: 10
@@ -965,7 +965,7 @@ MonoBehaviour:
   IncomingLight: {r: 4.691, g: 4.691, b: 4.691, a: 1}
   RayleighScatterCoef: 1
   RayleighExtinctionCoef: 1
-  MieScatterCoef: 3
+  MieScatterCoef: 1
   MieExtinctionCoef: 1
   MieG: 0.407
   DistanceScale: 3
@@ -986,6 +986,7 @@ MonoBehaviour:
   AmbientFoldout: 1
   DirLightFoldout: 0
   ReflectionProbeFoldout: 1
+  SunIlluminance: 120000
 --- !u!114 &1942086271
 MonoBehaviour:
   m_ObjectHideFlags: 0

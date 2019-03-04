@@ -21,6 +21,9 @@ sampler3D _ExtinctionLUT;
 
 float4 _FrustumCorners[4];
 
+sampler2D _TransmittanceLUT;
+float _SunIlluminance;
+
 //-----------------------------------------------------------------------------------------
 // InvParamHeight
 //-----------------------------------------------------------------------------------------
@@ -215,4 +218,20 @@ half4 PrecomputeGatherSum(float2 coords, int multiple)
 
     gathered *= 4.0 * PI / stepCount;
     return gathered;
+}
+
+//-----------------------------------------------------------------------------------------
+// Limb Darkening
+//-----------------------------------------------------------------------------------------
+void SunLimbDarkening(float normalizedCenter2Edge, inout float3 luminance)
+{
+    float3 u = float3(1.0, 1.0, 1.0); // some models have u !=1
+    float3 a = float3(0.397, 0.503, 0.652); // coefficient for RGB wavelength (680 ,550 ,440)
+    
+    float centerToEdge = 1.0 - normalizedCenter2Edge;
+    float mu = sqrt(1.0 - centerToEdge * centerToEdge);
+
+    float3 factor = 1.0 - u * (1.0 - pow(mu, a));
+    luminance *= factor;
+
 }

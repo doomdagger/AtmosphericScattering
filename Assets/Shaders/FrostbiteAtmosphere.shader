@@ -193,7 +193,6 @@
 
 				float4 color = tex2D(_Background, uv);
 				color.rgb = color.rgb * extinction.xyz + inscatter.xyz;
-				//color = float4(inscatter.xyz, 1.0);
 				return color;
 			}
 			ENDCG
