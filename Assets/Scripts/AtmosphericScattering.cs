@@ -179,9 +179,9 @@ public class AtmosphericScattering : MonoBehaviour
         PrecomputeMultipleSkyboxLUT(true); // use sum 1k to gen lut 2k
         PrecomputeMultipleGatherSum(); // gather sum 2k
         PrecomputeGatherSumAllTogether(); // add sum 2k into 1k
-        PrecomputeMultipleSkyboxLUT(); // use sum 2k to gen lut 3k
-        PrecomputeMultipleGatherSum(); // gather sum 3k
-        PrecomputeGatherSumAllTogether(); // add sum 3k into 1k
+        //PrecomputeMultipleSkyboxLUT(); // use sum 2k to gen lut 3k
+        //PrecomputeMultipleGatherSum(); // gather sum 3k
+        //PrecomputeGatherSumAllTogether(); // add sum 3k into 1k
     }
 
     private void InitializeAerialPerspLUTs()
@@ -233,6 +233,7 @@ public class AtmosphericScattering : MonoBehaviour
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
         SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
+        SaveTextureAsKTX(_skyboxLUTSingle, "skyboxlutsingle", true);
     }
 
     private void PrecomputeMultipleSkyboxLUT(bool afterFirstOrder=false)
