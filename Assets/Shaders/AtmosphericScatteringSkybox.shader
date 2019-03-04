@@ -77,7 +77,7 @@ Shader "Skybox/AtmosphericScattering"
 				float3 rayStart = _CameraPos;
 				float3 rayDir = normalize(mul((float3x3)unity_ObjectToWorld, i.vertex));
 
-				float3 lightDir = -_WorldSpaceLightPos0.xyz;
+				float3 lightDir = _WorldSpaceLightPos0.xyz;
 
 				float3 planetCenter = _CameraPos;
 				planetCenter = float3(0, -_PlanetRadius, 0);
@@ -86,7 +86,7 @@ Shader "Skybox/AtmosphericScattering"
 				float3 normal = normalize(rayStart - planetCenter);
 
 				float viewZenith = dot(normal, rayDir);
-				float sunZenith = dot(normal, -lightDir);
+				float sunZenith = dot(normal, lightDir);
 				float3 coords = float3(ParamHeight(height), ParamViewDirection(viewZenith, height), ParamSunDirection(sunZenith));
 
 				float4 scatterR = 0;
@@ -97,23 +97,22 @@ Shader "Skybox/AtmosphericScattering"
 				scatterR = tex3D(_SkyboxLUT, coords);
 #endif
 				ApproximateMieFromRayleigh(scatterR, scatterM.xyz);
-				ApplyPhaseFunctionElek(scatterR.xyz, scatterM.xyz, dot(rayDir, -lightDir.xyz));
+				ApplyPhaseFunctionElek(scatterR.xyz, scatterM.xyz, dot(rayDir, lightDir.xyz));
 
 				float3 lightInscatter = scatterR + scatterM;
 
-				//coords.xy = float2(ParamViewDirection(1.0, 0.0), ParamHeight(0.0));
-				//float3 transZenith = tex2D(_TransmittanceLUT, coords.xy).xyz;
+				float3 transZenith = tex2D(_TransmittanceLUT, float2(ParamHeight(0.0), ParamSunDirection(1.0))).xyz;
+				lightInscatter *= _LightIrradiance.rgb / transZenith;
 
-				//coords.xy = float2(ParamViewDirection(viewZenith, height), ParamHeight(height));
-				//float3 transCurrent = tex2D(_TransmittanceLUT, coords.xy).xyz;
+				//float3 transCurrent = tex2D(_TransmittanceLUT, coords.xz).xyz;
 
 				//float sunAngularDiameter = 0.545 / 180.0 * PI * 2;
-				//if (dot(rayDir, -lightDir) > cos(sunAngularDiameter))
+				//if (dot(rayDir, lightDir) > cos(sunAngularDiameter))
 				//{
 				//	float3 sunColor = _SunIlluminance / (2 * PI * (1 - cos(0.5 * (0.545 / 180 * PI))));
 				//	sunColor = transCurrent / transZenith * 100;
 
-				//	float centerToEdge = (dot(rayDir, -lightDir) - cos(sunAngularDiameter)) / (1.0 - cos(sunAngularDiameter));
+				//	float centerToEdge = (dot(rayDir, lightDir) - cos(sunAngularDiameter)) / (1.0 - cos(sunAngularDiameter));
 				//	SunLimbDarkening(centerToEdge, sunColor);
 
 				//	return float4(sunColor + lightInscatter, 1.0);

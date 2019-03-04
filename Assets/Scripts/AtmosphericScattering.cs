@@ -176,10 +176,10 @@ public class AtmosphericScattering : MonoBehaviour
         PrecomputeTransmittance();
         PrecomputeSkyboxLUT(); // gen lut 1k
         PrecomputeGatherSum(); // gather sum 1k
-        PrecomputeMultipleSkyboxLUT(2); // use sum 1k to gen lut 2k
+        PrecomputeMultipleSkyboxLUT(true); // use sum 1k to gen lut 2k
         PrecomputeMultipleGatherSum(); // gather sum 2k
         PrecomputeGatherSumAllTogether(); // add sum 2k into 1k
-        PrecomputeMultipleSkyboxLUT(3); // use sum 2k to gen lut 3k
+        PrecomputeMultipleSkyboxLUT(); // use sum 2k to gen lut 3k
         PrecomputeMultipleGatherSum(); // gather sum 3k
         PrecomputeGatherSumAllTogether(); // add sum 3k into 1k
     }
@@ -235,7 +235,7 @@ public class AtmosphericScattering : MonoBehaviour
         SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
     }
 
-    private void PrecomputeMultipleSkyboxLUT(int order)
+    private void PrecomputeMultipleSkyboxLUT(bool afterFirstOrder=false)
     {
         if (_skyboxLUT2 == null)
         {
@@ -248,7 +248,7 @@ public class AtmosphericScattering : MonoBehaviour
         }
 
         int kernel = ScatteringComputeShader.FindKernel("MultipleScatterLUT");
-        if (order == 2)
+        if (afterFirstOrder)
         {
             ScatteringComputeShader.SetTexture(kernel, "_GatherSumLUT2", _gatherSumLUT); // gather sum of first order
         }
@@ -272,7 +272,7 @@ public class AtmosphericScattering : MonoBehaviour
     {
         if (_transmittanceLUT == null)
         {
-            _transmittanceLUT = new RenderTexture(128, 32, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _transmittanceLUT = new RenderTexture(32, 128, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
             _transmittanceLUT.name = "TransmittanceLUT";
             _transmittanceLUT.filterMode = FilterMode.Bilinear;
             _transmittanceLUT.Create();
@@ -384,7 +384,7 @@ public class AtmosphericScattering : MonoBehaviour
         material.SetFloat("_MieG", MieG);
 
         material.SetVector("_LightDir", new Vector4(Sun.transform.forward.x, Sun.transform.forward.y, Sun.transform.forward.z, 1.0f / (Sun.range * Sun.range)));
-        material.SetVector("_LightColor", Sun.color * Sun.intensity);
+        material.SetVector("_LightIrradiance", Sun.color * Sun.intensity);
         material.SetFloat("_SunIlluminance", SunIlluminance);
 
         material.SetTexture("_SkyboxLUT", _skyboxLUT);

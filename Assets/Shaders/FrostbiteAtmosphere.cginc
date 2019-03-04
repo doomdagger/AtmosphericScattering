@@ -23,13 +23,14 @@ float4 _FrustumCorners[4];
 
 sampler2D _TransmittanceLUT;
 float _SunIlluminance;
+float4 _LightIrradiance;
 
 //-----------------------------------------------------------------------------------------
 // InvParamHeight
 //-----------------------------------------------------------------------------------------
 float InvParamHeight(float u_h)
 {
-	return u_h * u_h * _AtmosphereHeight;
+    return max(u_h * u_h * _AtmosphereHeight, 0.0);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -37,15 +38,18 @@ float InvParamHeight(float u_h)
 //-----------------------------------------------------------------------------------------
 float InvParamViewDirection(float u_v, float h)
 {
+    h = max(h, 0.0);
 	float c_h = -sqrt(h * (2.0 * _PlanetRadius + h)) / (_PlanetRadius + h);
+    float c_v;
 	if (u_v > 0.5)
 	{
-		return c_h + pow((u_v-0.5)*2.0, 5.0) * (1.0 - c_h);
-	}
+        c_v = max(c_h + pow((u_v - 0.5) * 2.0, 5.0) * (1.0 - c_h), c_h + 1e-4);
+    }
 	else
 	{
-		return c_h - pow(u_v*2.0, 5.0) * (1.0 + c_h);
-	}
+        c_v = max(c_h - pow(u_v * 2.0, 5.0) * (1.0 + c_h), c_h - 1e-4);
+    }
+    return clamp(c_v, -1.0, 1.0);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -53,7 +57,8 @@ float InvParamViewDirection(float u_v, float h)
 //-----------------------------------------------------------------------------------------
 float InvParamSunDirection(float u_s)
 {
-	return (tan((2.0 * u_s - 1.0 + 0.26)*0.75)) / (tan(1.26 * 0.75));
+	float c_s = tan((2.0 * u_s - 1.0 + 0.26)*0.75) / tan(1.26 * 0.75);
+    return clamp(c_s, -1.0, 1.0);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -61,15 +66,18 @@ float InvParamSunDirection(float u_s)
 //-----------------------------------------------------------------------------------------
 float ParamViewDirection(float c_v, float h)
 {
+    h = max(h, 0.0);
 	float c_h = -sqrt(h * (2.0 * _PlanetRadius + h)) / (_PlanetRadius + h);
 	if (c_v > c_h)
 	{
-		return 0.5 * pow((c_v - c_h) / (1.0 - c_h), 0.2) + 0.5;
-	}
+        c_v = max(c_v, c_h + 0.0001);
+        return 0.5 * pow(saturate((c_v - c_h) / (1.0 - c_h)), 0.2) + 0.5;
+    }
 	else
 	{
-		return 0.5 * pow((c_h - c_v) / (c_h + 1.0), 0.2);
-	}
+        c_v = min(c_v, c_h - 0.0001);
+        return 0.5 * pow(saturate((c_h - c_v) / (c_h + 1.0)), 0.2);
+    }
 }
 
 //-----------------------------------------------------------------------------------------
@@ -77,6 +85,7 @@ float ParamViewDirection(float c_v, float h)
 //-----------------------------------------------------------------------------------------
 float ParamHeight(float h)
 {
+    h = clamp(h, 0.0, _AtmosphereHeight);
 	return pow(h / _AtmosphereHeight, 0.5);
 }
 
@@ -85,7 +94,7 @@ float ParamHeight(float h)
 //-----------------------------------------------------------------------------------------
 float ParamSunDirection(float c_s)
 {
-	return 0.5 * ((atan(max(c_s, -0.1975) * tan(1.26*1.1)) / 1.1) + (1 - 0.26));
+    return 0.5 * (atan(max(c_s, -0.45) * tan(1.26*0.75)) / 0.75 + (1.0 - 0.26));
 }
 
 //-----------------------------------------------------------------------------------------
@@ -114,14 +123,15 @@ float2 RaySphereIntersection(float3 rayOrigin, float3 rayDir, float3 sphereCente
 //-----------------------------------------------------------------------------------------
 void ApplyPhaseFunctionElek(inout float3 scatterR, inout float3 scatterM, float cosAngle)
 {
+    float inv4PI = 1.0 / (4.0 * PI);
 	// r
-	float phase = (8.0 / 10.0) * ((7.0 / 5.0) + 0.5 * cosAngle);
+    float phase = inv4PI * (8.0 / 10.0) * ((7.0 / 5.0) + 0.5 * cosAngle);
 	scatterR *= phase;
 
 	// m
 	float g = _MieG;
 	float g2 = g * g;
-	phase = ((3.0 * (1.0 - g2)) / (2.0 * (2.0 + g2))) * ((1 + cosAngle * cosAngle) / (pow((1 + g2 - 2 * g*cosAngle), 3.0 / 2.0)));
+    phase = inv4PI * ((3.0 * (1.0 - g2)) / (2.0 * (2.0 + g2))) * ((1 + cosAngle * cosAngle) / (pow((1 + g2 - 2 * g * cosAngle), 3.0 / 2.0)));
 	scatterM *= phase;
 }
 
@@ -196,7 +206,7 @@ half4 PrecomputeGatherSum(float2 coords, int multiple)
     float4 scatterR;
 	float3 scatterM;
 
-    for (int step = 0; step <= stepCount; step+=1)
+    for (int step = 0; step < stepCount; step+=1)
     {
         float cos_v = cos(step * stepSize);
         viewDir = GetDirectionFromCos(cos_v);
@@ -213,10 +223,10 @@ half4 PrecomputeGatherSum(float2 coords, int multiple)
 		ApproximateMieFromRayleigh(scatterR, scatterM);
         ApplyPhaseFunctionElek(scatterR.xyz, scatterM, dot(viewDir, sunDir));
         
-		gathered += float4(scatterR.xyz, scatterM.x);
+        gathered += float4(scatterR.xyz + scatterM.xyz, 0.0);
     }
 
-    gathered *= 4.0 * PI / stepCount;
+    gathered *= 4.0 * PI / stepCount; // TODO: should multiply 4PI ??
     return gathered;
 }
 
