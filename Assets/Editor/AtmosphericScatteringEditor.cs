@@ -14,7 +14,8 @@ class AtmosphericScatteringEditor : Editor
 
     SerializedProperty RenderingMode;
     SerializedProperty ScatteringComputeShader;
-	SerializedProperty FrostbiteComputeShader;
+	SerializedProperty FrostbiteReadShader;
+    SerializedProperty FrostbiteWriteShader;
     SerializedProperty Sun;
     SerializedProperty RenderAtmosphericFog;
     SerializedProperty IncomingLight;
@@ -62,7 +63,8 @@ class AtmosphericScatteringEditor : Editor
         reflectionProbeFoldout = serializedObject.FindProperty("ReflectionProbeFoldout");
         RenderingMode = serializedObject.FindProperty("RenderingMode");
         ScatteringComputeShader = serializedObject.FindProperty("ScatteringComputeShader");
-		FrostbiteComputeShader = serializedObject.FindProperty ("FrostbiteComputeShader");
+		FrostbiteReadShader = serializedObject.FindProperty ("FrostbiteReadShader");
+        FrostbiteWriteShader = serializedObject.FindProperty("FrostbiteWriteShader");
         Sun = serializedObject.FindProperty("Sun");
         RenderAtmosphericFog = serializedObject.FindProperty("RenderAtmosphericFog");
         IncomingLight = serializedObject.FindProperty("IncomingLight");
@@ -107,8 +109,10 @@ class AtmosphericScatteringEditor : Editor
             AtmosphericScattering.RenderMode rm = (AtmosphericScattering.RenderMode)EditorGUILayout.EnumPopup("Rendering Mode", (AtmosphericScattering.RenderMode)RenderingMode.enumValueIndex);
             RenderingMode.enumValueIndex = (int)rm;
             ScatteringComputeShader.objectReferenceValue = (ComputeShader)EditorGUILayout.ObjectField("Compute Shader", ScatteringComputeShader.objectReferenceValue, typeof(ComputeShader));
-			FrostbiteComputeShader.objectReferenceValue = (ComputeShader)EditorGUILayout.ObjectField ("Frostbite Compute Shader", FrostbiteComputeShader.objectReferenceValue, typeof(ComputeShader));
-			Sun.objectReferenceValue = (Light)EditorGUILayout.ObjectField("Sun", Sun.objectReferenceValue, typeof(Light));
+			FrostbiteReadShader.objectReferenceValue = (ComputeShader)EditorGUILayout.ObjectField ("Read Compute Shader", FrostbiteReadShader.objectReferenceValue, typeof(ComputeShader));
+            FrostbiteWriteShader.objectReferenceValue = (ComputeShader)EditorGUILayout.ObjectField("Write Compute Shader", FrostbiteWriteShader.objectReferenceValue, typeof(ComputeShader));
+
+            Sun.objectReferenceValue = (Light)EditorGUILayout.ObjectField("Sun", Sun.objectReferenceValue, typeof(Light));
         }
 
         a.ScatteringFoldout = EditorGUILayout.Foldout(a.ScatteringFoldout, "Atmospheric Scattering");

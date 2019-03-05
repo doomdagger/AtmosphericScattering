@@ -362,7 +362,7 @@ half4 PrecomputeTransmittance(float height, float3 rayDir)
 //-----------------------------------------------------------------------------------------
 // PrecomputeGatherSum
 //-----------------------------------------------------------------------------------------
-half4 PrecomputeGatherSum(float2 coords, int multiple)
+half4 PrecomputeGatherSum(float2 coords)
 {
     float stepCount = 64;
     float stepSize = (2.0 * PI) / stepCount;
@@ -386,14 +386,8 @@ half4 PrecomputeGatherSum(float2 coords, int multiple)
         viewDir = GetDirectionFromCos(cos_v);
 
         currentLookupCoords = WorldParams2InsctrLUTCoords(height, cos_v, cos_s, prevLookupCoords);
-		if (multiple == 1)
-		{
-            scatterR = tex3D(_SkyboxLUT2, currentLookupCoords);
-        }
-		else
-		{
-            scatterR = tex3D(_SkyboxLUT, currentLookupCoords);
-        }
+        scatterR = tex3D(_SkyboxLUT2, currentLookupCoords);
+
         prevLookupCoords = currentLookupCoords;
 
 		ApproximateMieFromRayleigh(scatterR, scatterM);

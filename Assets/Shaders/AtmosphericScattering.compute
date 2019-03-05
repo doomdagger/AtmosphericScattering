@@ -29,12 +29,12 @@
 #pragma kernel MultipleScatterLUT
 #pragma kernel AerialPerspLUT
 
-RWTexture3D<half4> _SkyboxLUT;
-RWTexture3D<half4> _SkyboxLUT2;
-RWTexture3D<half4> _SkyboxLUTSingle;
+RWTexture3D<float4> _SkyboxLUT;
+RWTexture3D<float4> _SkyboxLUT2;
+RWTexture3D<float4> _SkyboxLUTSingle;
 
-RWTexture3D<half4> _InscatteringLUT;
-RWTexture3D<half4> _ExtinctionLUT;
+RWTexture3D<float4> _InscatteringLUT;
+RWTexture3D<float4> _ExtinctionLUT;
 
 float3 _InscatteringLUTSize;
 
@@ -448,7 +448,7 @@ ScatteringOutput IntegrateInscattering(float3 rayStart, float3 rayDir, float ray
 void SkyboxLUT(uint3 id : SV_DispatchThreadID)
 {
 	float w, h, d;
-	_SkyboxLUT.GetDimensions(w, h, d);
+	_SkyboxLUT2.GetDimensions(w, h, d);
 
 	// linear parameters
 	float3 coords = float3(id.x / (w - 1), id.y / (h - 1), id.z / (d - 1));
@@ -460,7 +460,7 @@ void SkyboxLUT(uint3 id : SV_DispatchThreadID)
 
 	ScatteringOutput scattering = IntegrateInscattering(rayStart, rayDir, rayLength, planetCenter, lightDir, height);
 	
-	_SkyboxLUT[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
+	_SkyboxLUT2[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
 	_SkyboxLUTSingle[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
 }
 
@@ -573,7 +573,6 @@ void MultipleScatterLUT(uint3 id : SV_DispatchThreadID)
     ScatteringOutput scattering = IntegrateMultiScattering(rayStart, rayDir, rayLength, planetCenter, lightDir, height, coords);
 	
     _SkyboxLUT2[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
-    _SkyboxLUT[id.xyz] += float4(scattering.rayleigh.xyz, scattering.mie.x);
 }
 
 //-----------------------------------------------------------------------------------------

@@ -52,7 +52,8 @@ public class AtmosphericScattering : MonoBehaviour
     public RenderMode RenderingMode = RenderMode.Optimized;
     public LightShaftsQuality LightShaftQuality = LightShaftsQuality.Medium;
     public ComputeShader ScatteringComputeShader;
-	public ComputeShader FrostbiteComputeShader;
+	public ComputeShader FrostbiteReadShader;
+    public ComputeShader FrostbiteWriteShader;
     public Light Sun;
 
 	private RenderTexture _transmittanceLUT = null;
@@ -63,6 +64,8 @@ public class AtmosphericScattering : MonoBehaviour
     private Vector2 _transmitLUTSize = new Vector2(32, 128);
     private Vector2 _gatherSumLUTSize = new Vector2(32, 32);
 
+    private float[] _skyboxData = null;
+
     private Vector3 _inscatteringLUTSize = new Vector3(32, 32, 16);
     private RenderTexture _inscatteringLUT;
     private RenderTexture _extinctionLUT;
@@ -70,6 +73,8 @@ public class AtmosphericScattering : MonoBehaviour
     private RenderTexture _skyboxLUT;
     private RenderTexture _skyboxLUT2;
     private RenderTexture _skyboxLUTSingle;
+    private int _gatherSumCount = 1;
+    private int _skyboxCount = 1;
 
 	private Material _frostbiteMat;
 
@@ -178,12 +183,17 @@ public class AtmosphericScattering : MonoBehaviour
         PrecomputeTransmittance();
         PrecomputeSkyboxLUT(); // gen lut 1k
         PrecomputeGatherSum(); // gather sum 1k
-        PrecomputeMultipleSkyboxLUT(true); // use sum 1k to gen lut 2k
-        PrecomputeMultipleGatherSum(); // gather sum 2k
+        PrecomputeGatherSumAllTogether();
+        PrecomputeSkyboxAlltogether();
+        PrecomputeMultipleSkyboxLUT(); // use sum 1k to gen lut 2k
+        PrecomputeGatherSum(); // gather sum 2k
         PrecomputeGatherSumAllTogether(); // add sum 2k into 1k
-        //PrecomputeMultipleSkyboxLUT(); // use sum 2k to gen lut 3k
-        //PrecomputeMultipleGatherSum(); // gather sum 3k
-        //PrecomputeGatherSumAllTogether(); // add sum 3k into 1k
+        PrecomputeSkyboxAlltogether();
+        PrecomputeMultipleSkyboxLUT(); // use sum 2k to gen lut 3k
+        PrecomputeGatherSum(); // gather sum 3k
+        PrecomputeGatherSumAllTogether(); // add sum 3k into 1k
+        PrecomputeSkyboxAlltogether();
+        CreateFinalSkyboxLUT();
     }
 
     private void InitializeAerialPerspLUTs()
@@ -208,14 +218,14 @@ public class AtmosphericScattering : MonoBehaviour
     /// </summary>
     private void PrecomputeSkyboxLUT()
     {
-        if (_skyboxLUT == null)
+        if (_skyboxLUT2 == null)
         {
-            _skyboxLUT = new RenderTexture((int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-            _skyboxLUT.volumeDepth = (int)_skyboxLUTSize.z;
-            _skyboxLUT.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
-            _skyboxLUT.enableRandomWrite = true;
-            _skyboxLUT.name = "SkyboxLUT";
-            _skyboxLUT.Create();
+            _skyboxLUT2 = new RenderTexture((int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _skyboxLUT2.volumeDepth = (int)_skyboxLUTSize.z;
+            _skyboxLUT2.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
+            _skyboxLUT2.enableRandomWrite = true;
+            _skyboxLUT2.name = "SkyboxLUT2";
+            _skyboxLUT2.Create();
         }
 
         if (_skyboxLUTSingle == null)
@@ -229,43 +239,25 @@ public class AtmosphericScattering : MonoBehaviour
         }
 
         int kernel = ScatteringComputeShader.FindKernel("SkyboxLUT");
-        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT", _skyboxLUT);
+        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT2", _skyboxLUT2);
         ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUTSingle", _skyboxLUTSingle);
         UpdateCommonComputeShaderParameters(kernel);
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
-        SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
+        SaveTextureAsKTX(_skyboxLUT2, "skyboxlut"+_skyboxCount++, true);
         SaveTextureAsKTX(_skyboxLUTSingle, "skyboxlutsingle", true);
     }
 
-    private void PrecomputeMultipleSkyboxLUT(bool afterFirstOrder=false)
+    private void PrecomputeMultipleSkyboxLUT()
     {
-        if (_skyboxLUT2 == null)
-        {
-            _skyboxLUT2 = new RenderTexture((int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-            _skyboxLUT2.volumeDepth = (int)_skyboxLUTSize.z;
-            _skyboxLUT2.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
-            _skyboxLUT2.enableRandomWrite = true;
-            _skyboxLUT2.name = "SkyboxLUT2";
-            _skyboxLUT2.Create();
-        }
-
         int kernel = ScatteringComputeShader.FindKernel("MultipleScatterLUT");
-        if (afterFirstOrder)
-        {
-            ScatteringComputeShader.SetTexture(kernel, "_GatherSumLUT2", _gatherSumLUT); // gather sum of first order
-        }
-        else
-        {
-            ScatteringComputeShader.SetTexture(kernel, "_GatherSumLUT2", _gatherSumLUT2); // gather sum of previous order
-        }
-        ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT", _skyboxLUT); // cumulative scattering lut
+
+        ScatteringComputeShader.SetTexture(kernel, "_GatherSumLUT2", _gatherSumLUT2); // gather sum of previous order
         ScatteringComputeShader.SetTexture(kernel, "_SkyboxLUT2", _skyboxLUT2); // current write to
         UpdateCommonComputeShaderParameters(kernel);
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
-        SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
-        SaveTextureAsKTX(_skyboxLUT2, "skyboxlut2", true);
+        SaveTextureAsKTX(_skyboxLUT2, "skyboxlut"+_skyboxCount++, true);
     }
 
     /// <summary>
@@ -287,28 +279,72 @@ public class AtmosphericScattering : MonoBehaviour
         SaveTextureAsKTX(_transmittanceLUT, "transmittance");
     }
 
+    private void PrecomputeSkyboxAlltogether()
+    {
+        int texDepth = (int)_skyboxLUTSize.z;
+        int texWidth = (int)_skyboxLUTSize.x;
+        int texHeight = (int)_skyboxLUTSize.y;
+        int floatSize = sizeof(float);
+        int channels = 4;
+        int texSize = texWidth * texHeight * texDepth;
+        bool firstTime = false;
+
+        if (_skyboxData == null)
+        {
+            firstTime = true;
+            _skyboxData = new float[texSize * channels];
+        }
+
+        ComputeBuffer buffer = new ComputeBuffer(texSize, floatSize * channels); // 4 bytes for float and 4 channels
+        CBUtility.ReadFromRenderTexture(_skyboxLUT2, channels, buffer, FrostbiteReadShader);
+        float[] data = new float[texSize * channels];
+        buffer.GetData(data);
+
+        if (firstTime)
+        {
+            for (int i = 0; i < _skyboxData.Length; ++i)
+                _skyboxData[i] = data[i];
+        }
+        else
+        {
+            for (int i = 0; i < _skyboxData.Length; ++i)
+                _skyboxData[i] += data[i];
+        }
+
+        buffer.Release();
+    }
+
+    private void CreateFinalSkyboxLUT()
+    {
+        int texDepth = (int)_skyboxLUTSize.z;
+        int texWidth = (int)_skyboxLUTSize.x;
+        int texHeight = (int)_skyboxLUTSize.y;
+        int floatSize = sizeof(float);
+        int channels = 4;
+        int texSize = texWidth * texHeight * texDepth;
+
+        if (_skyboxLUT == null)
+        {
+            _skyboxLUT = new RenderTexture((int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _skyboxLUT.volumeDepth = (int)_skyboxLUTSize.z;
+            _skyboxLUT.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
+            _skyboxLUT.enableRandomWrite = true;
+            _skyboxLUT.name = "SkyboxLUT";
+            _skyboxLUT.Create();
+        }
+
+        ComputeBuffer buffer = new ComputeBuffer(texSize, floatSize * channels); // 4 bytes for float and 4 channels
+        buffer.SetData(_skyboxData);
+        CBUtility.WriteIntoRenderTexture(_skyboxLUT, channels, buffer, FrostbiteWriteShader);
+
+        buffer.Release();
+        SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
+    }
+
     /// <summary>
     /// 
     /// </summary>
     private void PrecomputeGatherSum()
-    {
-        if (_gatherSumLUT == null)
-        {
-            _gatherSumLUT = new RenderTexture((int)_gatherSumLUTSize.x, (int)_gatherSumLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-            _gatherSumLUT.name = "GatherSumLUT";
-            _gatherSumLUT.filterMode = FilterMode.Bilinear;
-            _gatherSumLUT.Create();
-        }
-
-        _frostbiteMat.SetTexture("_SkyboxLUT", _skyboxLUT);
-
-        Texture nullTexture = null;
-        Graphics.Blit(nullTexture, _gatherSumLUT, _frostbiteMat, 1);
-
-        SaveTextureAsKTX(_gatherSumLUT, "gathersum");
-    }
-
-    private void PrecomputeMultipleGatherSum()
     {
         if (_gatherSumLUT2 == null)
         {
@@ -321,9 +357,9 @@ public class AtmosphericScattering : MonoBehaviour
         _frostbiteMat.SetTexture("_SkyboxLUT2", _skyboxLUT2);
 
         Texture nullTexture = null;
-        Graphics.Blit(nullTexture, _gatherSumLUT2, _frostbiteMat, 2);
+        Graphics.Blit(nullTexture, _gatherSumLUT2, _frostbiteMat, 1);
 
-        SaveTextureAsKTX(_gatherSumLUT2, "gathersum2");
+        SaveTextureAsKTX(_gatherSumLUT2, "gathersum" + _gatherSumCount++);
     }
 
     /// <summary>
@@ -331,18 +367,39 @@ public class AtmosphericScattering : MonoBehaviour
     /// </summary>
     private void PrecomputeGatherSumAllTogether()
     {
-        Texture2D sum = ToTexture2D(_gatherSumLUT);
+        bool firstTime = false;
+        if (_gatherSumLUT == null)
+        {
+            _gatherSumLUT = new RenderTexture((int)_gatherSumLUTSize.x, (int)_gatherSumLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _gatherSumLUT.name = "GatherSumLUT";
+            _gatherSumLUT.filterMode = FilterMode.Bilinear;
+            _gatherSumLUT.Create();
+
+            firstTime = true;
+        }
+
         Texture2D korder = ToTexture2D(_gatherSumLUT2);
 
-        Color[] sumColors = sum.GetPixels();
-        Color[] korderColors = korder.GetPixels();
-
-        for (int i = 0; i < sumColors.Length; ++i)
+        if (firstTime)
         {
-            sumColors[i] += korderColors[i];
+            Graphics.Blit(korder, _gatherSumLUT);
         }
-        sum.SetPixels(sumColors);
-        Graphics.Blit(sum, _gatherSumLUT);
+        else
+        {
+            Texture2D sum = ToTexture2D(_gatherSumLUT);
+
+            Color[] sumColors = sum.GetPixels();
+            Color[] korderColors = korder.GetPixels();
+
+            for (int i = 0; i < sumColors.Length; ++i)
+            {
+                sumColors[i] += korderColors[i];
+            }
+
+            sum.SetPixels(sumColors);
+            sum.Apply();
+            Graphics.Blit(sum, _gatherSumLUT);
+        }
 
         SaveTextureAsKTX(_gatherSumLUT, "gathersum");
     }
@@ -500,7 +557,7 @@ public class AtmosphericScattering : MonoBehaviour
         _frostbiteMat.SetTexture("_Background", source);
 
         Texture nullTexture = null;
-        Graphics.Blit(nullTexture, destination, _frostbiteMat, 3);
+        Graphics.Blit(nullTexture, destination, _frostbiteMat, 2);
     }
 
     Texture2D ToTexture2D(RenderTexture rTex)
@@ -532,7 +589,7 @@ public class AtmosphericScattering : MonoBehaviour
 
         ComputeBuffer buffer = new ComputeBuffer(texSize, floatSize * channels); // 4 bytes for float and 4 channels
 
-        CBUtility.ReadFromRenderTexture(rtex, channels, buffer, FrostbiteComputeShader);
+        CBUtility.ReadFromRenderTexture(rtex, channels, buffer, FrostbiteReadShader);
 
         float[] data = new float[texSize * channels];
 
