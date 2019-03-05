@@ -87,7 +87,7 @@ Shader "Skybox/AtmosphericScattering"
 
 				float viewZenith = dot(normal, rayDir);
 				float sunZenith = dot(normal, lightDir);
-				float3 coords = float3(ParamHeight(height), ParamViewDirection(viewZenith, height), ParamSunDirection(sunZenith));
+				float3 coords = WorldParams2InsctrLUTCoords(height, viewZenith, sunZenith, float3(0, -1, 0));
 
 				float4 scatterR = 0;
 				float4 scatterM = 0;
@@ -101,7 +101,7 @@ Shader "Skybox/AtmosphericScattering"
 
 				float3 lightInscatter = scatterR + scatterM;
 
-				float3 transZenith = tex2D(_TransmittanceLUT, float2(ParamHeight(0.0), ParamSunDirection(1.0))).xyz;
+				float3 transZenith = tex2D(_TransmittanceLUT, WorldParams2TransmitLUTCoords(0.0, 1.0)).xyz;
 				lightInscatter *= _LightIrradiance.rgb / transZenith;
 
 				//float3 transCurrent = tex2D(_TransmittanceLUT, coords.xz).xyz;

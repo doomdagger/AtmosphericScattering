@@ -50,13 +50,11 @@
 			
 			half4 frag (v2f i) : SV_Target
 			{
-				float height = InvParamHeight(i.uv.x);
-				float cos_v = InvParamSunDirection(i.uv.y);
-				float sin_v = sqrt(saturate(1.0 - cos_v * cos_v));
-				float3 rayDir = float3(sin_v, cos_v, 0.0);
+				float height, cos_v;
+				TransmitLUTCoords2WorldParams(i.uv, height, cos_v);
+				float3 rayDir = GetDirectionFromCos(cos_v);
 
 				half4 transmittance = PrecomputeTransmittance(height, rayDir);
-
 				return transmittance;
 			}
 			ENDCG

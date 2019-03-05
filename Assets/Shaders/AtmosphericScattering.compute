@@ -67,6 +67,243 @@ float _MieG;
 
 #define PI 3.14159265359
 
+float3 _ScatterLUTSize;
+float2 _TransmittanceLUTSize;
+float2 _GatherSumLUTSize;
+
+static const float SafetyHeightMargin = 16.f;
+static const float HeightPower = 0.5f;
+static const float ViewZenithPower = 0.2;
+static const float SunViewPower = 1.5f;
+
+//-----------------------------------------------------------------------------------------
+// GetCosHorizonAnlge
+//-----------------------------------------------------------------------------------------
+float GetCosHorizonAnlge(float fHeight)
+{
+    // Due to numeric precision issues, fHeight might sometimes be slightly negative
+    fHeight = max(fHeight, 0);
+    return -sqrt(fHeight * (2 * _PlanetRadius + fHeight)) / (_PlanetRadius + fHeight);
+}
+
+//-----------------------------------------------------------------------------------------
+// TexCoord2ZenithAngle
+//-----------------------------------------------------------------------------------------
+float TexCoord2ZenithAngle(float fTexCoord, float fHeight, in float fTexDim, float power)
+{
+    float fCosZenithAngle;
+
+    float fCosHorzAngle = GetCosHorizonAnlge(fHeight);
+    if (fTexCoord > 0.5)
+    {
+        // Remap to [0,1] from the upper half of the texture [0.5 + 0.5/fTexDim, 1 - 0.5/fTexDim]
+        fTexCoord = saturate((fTexCoord - (0.5f + 0.5f / fTexDim)) * fTexDim / (fTexDim / 2 - 1));
+        fTexCoord = pow(fTexCoord, 1 / power);
+        // Assure that the ray does NOT hit Earth
+        fCosZenithAngle = max((fCosHorzAngle + fTexCoord * (1 - fCosHorzAngle)), fCosHorzAngle + 1e-4);
+    }
+    else
+    {
+        // Remap to [0,1] from the lower half of the texture [0.5, 0.5 - 0.5/fTexDim]
+        fTexCoord = saturate((fTexCoord - 0.5f / fTexDim) * fTexDim / (fTexDim / 2 - 1));
+        fTexCoord = pow(fTexCoord, 1 / power);
+        // Assure that the ray DOES hit Earth
+        fCosZenithAngle = min((fCosHorzAngle - fTexCoord * (fCosHorzAngle - (-1))), fCosHorzAngle - 1e-4);
+    }
+    
+    return clamp(fCosZenithAngle, -1, +1);
+}
+
+//-----------------------------------------------------------------------------------------
+// InsctrLUTCoords2WorldParams
+//-----------------------------------------------------------------------------------------
+void InsctrLUTCoords2WorldParams(in float3 f3UVW,
+                                 out float fHeight,
+                                 out float fCosViewZenithAngle,
+                                 out float fCosSunZenithAngle)
+{
+    // Rescale to exactly 0,1 range
+    f3UVW.xz = saturate((f3UVW * _ScatterLUTSize - 0.5) / (_ScatterLUTSize - 1)).xz;
+
+    f3UVW.x = pow(f3UVW.x, 1 / HeightPower);
+    // Allowable height range is limited to [SafetyHeightMargin, AtmTopHeight - SafetyHeightMargin] to
+    // avoid numeric issues at the Earth surface and the top of the atmosphere
+    fHeight = f3UVW.x * (_AtmosphereHeight - 2 * SafetyHeightMargin) + SafetyHeightMargin;
+
+    fCosViewZenithAngle = TexCoord2ZenithAngle(f3UVW.y, fHeight, _ScatterLUTSize.y, ViewZenithPower);
+    
+    // Use Eric Bruneton's formula for cosine of the sun-zenith angle
+    fCosSunZenithAngle = tan((2.0 * f3UVW.z - 1.0 + 0.26) * 1.1) / tan(1.26 * 1.1);
+    fCosSunZenithAngle = clamp(fCosSunZenithAngle, -1, +1);
+}
+
+//-----------------------------------------------------------------------------------------
+// ZenithAngle2TexCoord
+//-----------------------------------------------------------------------------------------
+float ZenithAngle2TexCoord(float fCosZenithAngle, float fHeight, in float fTexDim, float power, float fPrevTexCoord)
+{
+    fCosZenithAngle = fCosZenithAngle;
+    float fTexCoord;
+    float fCosHorzAngle = GetCosHorizonAnlge(fHeight);
+    // When performing look-ups into the scattering texture, it is very important that all the look-ups are consistent
+    // wrt to the horizon. This means that if the first look-up is above (below) horizon, then the second look-up
+    // should also be above (below) horizon. 
+    // We use previous texture coordinate, if it is provided, to find out if previous look-up was above or below
+    // horizon. If texture coordinate is negative, then this is the first look-up
+    bool bIsAboveHorizon = fPrevTexCoord >= 0.5;
+    bool bIsBelowHorizon = 0 <= fPrevTexCoord && fPrevTexCoord < 0.5;
+    if (bIsAboveHorizon ||
+        !bIsBelowHorizon && (fCosZenithAngle > fCosHorzAngle))
+    {
+        // Scale to [0,1]
+        fTexCoord = saturate((fCosZenithAngle - fCosHorzAngle) / (1 - fCosHorzAngle));
+        fTexCoord = pow(fTexCoord, power);
+        // Now remap texture coordinate to the upper half of the texture.
+        // To avoid filtering across discontinuity at 0.5, we must map
+        // the texture coordinate to [0.5 + 0.5/fTexDim, 1 - 0.5/fTexDim]
+        //
+        //      0.5   1.5               D/2+0.5        D-0.5  texture coordinate x dimension
+        //       |     |                   |            |
+        //    |  X  |  X  | .... |  X  ||  X  | .... |  X  |  
+        //       0     1          D/2-1   D/2          D-1    texel index
+        //
+        fTexCoord = 0.5f + 0.5f / fTexDim + fTexCoord * (fTexDim / 2 - 1) / fTexDim;
+    }
+    else
+    {
+        fTexCoord = saturate((fCosHorzAngle - fCosZenithAngle) / (fCosHorzAngle - (-1)));
+        fTexCoord = pow(fTexCoord, power);
+        // Now remap texture coordinate to the lower half of the texture.
+        // To avoid filtering across discontinuity at 0.5, we must map
+        // the texture coordinate to [0.5, 0.5 - 0.5/fTexDim]
+        //
+        //      0.5   1.5        D/2-0.5             texture coordinate x dimension
+        //       |     |            |       
+        //    |  X  |  X  | .... |  X  ||  X  | .... 
+        //       0     1          D/2-1   D/2        texel index
+        //
+        fTexCoord = 0.5f / fTexDim + fTexCoord * (fTexDim / 2 - 1) / fTexDim;
+    }
+
+    return fTexCoord;
+}
+
+//-----------------------------------------------------------------------------------------
+// WorldParams2InsctrLUTCoords
+//-----------------------------------------------------------------------------------------
+float3 WorldParams2InsctrLUTCoords(float fHeight,
+                                   float fCosViewZenithAngle,
+                                   float fCosSunZenithAngle,
+                                   in float3 f3RefUVW)
+{
+    float3 f3UVW;
+
+    // Limit allowable height range to [SafetyHeightMargin, AtmTopHeight - SafetyHeightMargin] to
+    // avoid numeric issues at the Earth surface and the top of the atmosphere
+    // (ray/Earth and ray/top of the atmosphere intersection tests are unstable when fHeight == 0 and
+    // fHeight == AtmTopHeight respectively)
+    fHeight = clamp(fHeight, SafetyHeightMargin, _AtmosphereHeight - SafetyHeightMargin);
+    f3UVW.x = saturate((fHeight - SafetyHeightMargin) / (_AtmosphereHeight - 2 * SafetyHeightMargin));
+    f3UVW.x = pow(f3UVW.x, HeightPower);
+
+    f3UVW.y = ZenithAngle2TexCoord(fCosViewZenithAngle, fHeight, _ScatterLUTSize.y, ViewZenithPower, f3RefUVW.y);
+    
+    // Use Eric Bruneton's formula for cosine of the sun-zenith angle
+    f3UVW.z = (atan(max(fCosSunZenithAngle, -0.1975) * tan(1.26 * 1.1)) / 1.1 + (1.0 - 0.26)) * 0.5;
+    
+    f3UVW.xz = ((f3UVW * (_ScatterLUTSize - 1) + 0.5) / _ScatterLUTSize).xz;
+
+    return f3UVW;
+}
+
+//-----------------------------------------------------------------------------------------
+// TransmitLUTCoords2WorldParams
+//-----------------------------------------------------------------------------------------
+void TransmitLUTCoords2WorldParams(in float2 f2UV,
+                                    out float fHeight,
+                                    out float fCosViewZenithAngle)
+{
+    // Rescale to exactly 0,1 range
+    f2UV.xy = saturate((f2UV * _TransmittanceLUTSize - 0.5) / (_TransmittanceLUTSize - 1)).xy;
+
+    f2UV.x = pow(f2UV.x, 1 / HeightPower);
+    // Allowable height range is limited to [SafetyHeightMargin, AtmTopHeight - SafetyHeightMargin] to
+    // avoid numeric issues at the Earth surface and the top of the atmosphere
+    fHeight = f2UV.x * (_AtmosphereHeight - 2 * SafetyHeightMargin) + SafetyHeightMargin;
+    
+    // Use Eric Bruneton's formula for cosine of the sun-zenith angle
+    fCosViewZenithAngle = tan((2.0 * f2UV.y - 1.0 + 0.26) * 1.1) / tan(1.26 * 1.1);
+    fCosViewZenithAngle = clamp(fCosViewZenithAngle, -1, +1);
+}
+
+//-----------------------------------------------------------------------------------------
+// WorldParams2TransmitLUTCoords
+//-----------------------------------------------------------------------------------------
+float2 WorldParams2TransmitLUTCoords(float fHeight,
+                                     float fCosViewZenithAngle)
+{
+    float2 f2UV;
+
+    // Limit allowable height range to [SafetyHeightMargin, AtmTopHeight - SafetyHeightMargin] to
+    // avoid numeric issues at the Earth surface and the top of the atmosphere
+    // (ray/Earth and ray/top of the atmosphere intersection tests are unstable when fHeight == 0 and
+    // fHeight == AtmTopHeight respectively)
+    fHeight = clamp(fHeight, SafetyHeightMargin, _AtmosphereHeight - SafetyHeightMargin);
+    f2UV.x = saturate((fHeight - SafetyHeightMargin) / (_AtmosphereHeight - 2 * SafetyHeightMargin));
+    f2UV.x = pow(f2UV.x, HeightPower);
+    
+    // Use Eric Bruneton's formula for cosine of the sun-zenith angle
+    f2UV.y = (atan(max(fCosViewZenithAngle, -0.1975) * tan(1.26 * 1.1)) / 1.1 + (1.0 - 0.26)) * 0.5;
+    
+    f2UV.xy = ((f2UV * (_TransmittanceLUTSize - 1) + 0.5) / _TransmittanceLUTSize).xy;
+
+    return f2UV;
+}
+
+//-----------------------------------------------------------------------------------------
+// GatherSumLUTCoords2WorldParams
+//-----------------------------------------------------------------------------------------
+void GatherSumLUTCoords2WorldParams(in float2 f2UV,
+                                    out float fHeight,
+                                    out float fCosSunZenithAngle)
+{
+    // Rescale to exactly 0,1 range
+    f2UV.xy = saturate((f2UV * _GatherSumLUTSize - 0.5) / (_GatherSumLUTSize - 1)).xy;
+
+    f2UV.x = pow(f2UV.x, 1 / HeightPower);
+    // Allowable height range is limited to [SafetyHeightMargin, AtmTopHeight - SafetyHeightMargin] to
+    // avoid numeric issues at the Earth surface and the top of the atmosphere
+    fHeight = f2UV.x * (_AtmosphereHeight - 2 * SafetyHeightMargin) + SafetyHeightMargin;
+    
+    // Use Eric Bruneton's formula for cosine of the sun-zenith angle
+    fCosSunZenithAngle = tan((2.0 * f2UV.y - 1.0 + 0.26) * 1.1) / tan(1.26 * 1.1);
+    fCosSunZenithAngle = clamp(fCosSunZenithAngle, -1, +1);
+}
+
+//-----------------------------------------------------------------------------------------
+// WorldParams2TransmitLUTCoords
+//-----------------------------------------------------------------------------------------
+float2 WorldParams2GatherSumLUTCoords(float fHeight,
+                                     float fCosSunZenithAngle)
+{
+    float2 f2UV;
+
+    // Limit allowable height range to [SafetyHeightMargin, AtmTopHeight - SafetyHeightMargin] to
+    // avoid numeric issues at the Earth surface and the top of the atmosphere
+    // (ray/Earth and ray/top of the atmosphere intersection tests are unstable when fHeight == 0 and
+    // fHeight == AtmTopHeight respectively)
+    fHeight = clamp(fHeight, SafetyHeightMargin, _AtmosphereHeight - SafetyHeightMargin);
+    f2UV.x = saturate((fHeight - SafetyHeightMargin) / (_AtmosphereHeight - 2 * SafetyHeightMargin));
+    f2UV.x = pow(f2UV.x, HeightPower);
+    
+    // Use Eric Bruneton's formula for cosine of the sun-zenith angle
+    f2UV.y = (atan(max(fCosSunZenithAngle, -0.1975) * tan(1.26 * 1.1)) / 1.1 + (1.0 - 0.26)) * 0.5;
+    
+    f2UV.xy = ((f2UV * (_GatherSumLUTSize - 1) + 0.5) / _GatherSumLUTSize).xy;
+
+    return f2UV;
+}
+
 //-----------------------------------------------------------------------------------------
 // ScatteringOutput
 //-----------------------------------------------------------------------------------------
@@ -98,80 +335,9 @@ float2 RaySphereIntersection(float3 rayOrigin, float3 rayDir, float3 sphereCente
 }
 
 //-----------------------------------------------------------------------------------------
-// InvParamHeight
-//-----------------------------------------------------------------------------------------
-float InvParamHeight(float u_h)
-{
-    return max(u_h * u_h * _AtmosphereHeight, 0.0);
-}
-
-//-----------------------------------------------------------------------------------------
-// InvParamViewDirection
-//-----------------------------------------------------------------------------------------
-float InvParamViewDirection(float u_v, float h)
-{
-    h = max(h, 0.0);
-    float c_h = -sqrt(h * (2.0 * _PlanetRadius + h)) / (_PlanetRadius + h);
-    float c_v;
-    if (u_v > 0.5)
-    {
-        c_v = max(c_h + pow((u_v - 0.5) * 2.0, 5.0) * (1.0 - c_h), c_h + 1e-4);
-    }
-    else
-    {
-        c_v = max(c_h - pow(u_v * 2.0, 5.0) * (1.0 + c_h), c_h - 1e-4);
-    }
-    return clamp(c_v, -1.0, 1.0);
-}
-
-//-----------------------------------------------------------------------------------------
-// InvParamSunDirection
-//-----------------------------------------------------------------------------------------
-float InvParamSunDirection(float u_s)
-{
-    float c_s = tan((2.0 * u_s - 1.0 + 0.26) * 0.75) / tan(1.26 * 0.75);
-    return clamp(c_s, -1.0, 1.0);
-}
-
-//-----------------------------------------------------------------------------------------
-// ParamViewDirection
-//-----------------------------------------------------------------------------------------
-float ParamViewDirection(float c_v, float h)
-{
-    h = max(h, 0.0);
-    float c_h = -sqrt(h * (2.0 * _PlanetRadius + h)) / (_PlanetRadius + h);
-    if (c_v > c_h)
-    {
-        c_v = max(c_v, c_h + 0.0001);
-        return 0.5 * pow(saturate((c_v - c_h) / (1.0 - c_h)), 0.2) + 0.5;
-    }
-    else
-    {
-        c_v = min(c_v, c_h - 0.0001);
-        return 0.5 * pow(saturate((c_h - c_v) / (c_h + 1.0)), 0.2);
-    }
-}
-
-//-----------------------------------------------------------------------------------------
-// ParamHeight
-//-----------------------------------------------------------------------------------------
-float ParamHeight(float h)
-{
-    h = clamp(h, 0.0, _AtmosphereHeight);
-    return pow(saturate(h / _AtmosphereHeight), 0.5);
-}
-
-//-----------------------------------------------------------------------------------------
-// ParamSunDirection
-//-----------------------------------------------------------------------------------------
-float ParamSunDirection(float c_s)
-{
-    return 0.5 * (atan(max(c_s, -0.45) * tan(1.26 * 0.75)) / 0.75 + (1.0 - 0.26));
-}
-//-----------------------------------------------------------------------------------------
 // GetTransmittanceP2PA
 //-----------------------------------------------------------------------------------------
-void GetTransmittanceP2PA(inout float3 transmittance, float2 uv)
+void GetTransmittanceP2PA(out float3 transmittance, float2 uv)
 {
     transmittance = _TransmittanceLUT.SampleLevel(LinearClampSampler, uv, 0.0).rgb;
 }
@@ -198,9 +364,8 @@ void ApplyPhaseFunctionElek(inout float3 scatterR, inout float3 scatterM, float 
 //-----------------------------------------------------------------------------------------
 void PrepareAllParametersForScattering(float3 coords, out float3 rayStart, out float3 rayDir, out float rayLength, out float3 planetCenter, out float3 lightDir, out float height)
 {
-    height = InvParamHeight(coords.x);
-    float viewZenithAngle = InvParamViewDirection(coords.y, height);
-    float sunZenithAngle = InvParamSunDirection(coords.z);
+    float viewZenithAngle, sunZenithAngle;
+    InsctrLUTCoords2WorldParams(coords, height, viewZenithAngle, sunZenithAngle);
 
     planetCenter = float3(0, -_PlanetRadius, 0);
     rayStart = float3(0, height, 0);
@@ -221,16 +386,14 @@ void PrepareAllParametersForScattering(float3 coords, out float3 rayStart, out f
 //-----------------------------------------------------------------------------------------
 ScatteringOutput IntegrateInscattering(float3 rayStart, float3 rayDir, float rayLength, float3 planetCenter, float3 lightDir, float height)
 {
-	float sampleCount = 128;
+	float sampleCount = 64;
     float stepSize = length(rayDir * rayLength) / sampleCount;
 
     float2 previousDensity, currentDensity, totalDensity;
     float3 previousScatterR, currentScatterR, totalScatterR;
     float3 previousScatterM, currentScatterM, totalScatterM;
-
-    float2 transUV;
-    transUV.x = ParamHeight(height);
-    transUV.y = ParamSunDirection(lightDir.y);
+    
+    float2 transUV = WorldParams2TransmitLUTCoords(height, lightDir.y);
 
     float3 transmittance;
     previousDensity = exp(-(height.xx / _DensityScaleHeight.xy));
@@ -246,7 +409,7 @@ ScatteringOutput IntegrateInscattering(float3 rayStart, float3 rayDir, float ray
 		float3 p = rayStart + step * stepSize * rayDir;
 
         height = length(p - planetCenter) - _PlanetRadius;
-        transUV.x = ParamHeight(height);
+        transUV = WorldParams2TransmitLUTCoords(height, lightDir.y);
 
         currentDensity = exp(-(height.xx / _DensityScaleHeight.xy));
         totalDensity += (currentDensity + previousDensity) / 2.0 * stepSize;
@@ -315,7 +478,10 @@ float3 GetDirectionFromCos(float cos_value)
 //-----------------------------------------------------------------------------------------
 void ApproximateMieFromRayleigh(in float4 scatterR, out float3 scatterM)
 {
-    scatterM.xyz = scatterR.xyz * ((scatterR.w) / (scatterR.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM.xyz / _ScatteringR.xyz);
+    if (scatterR.x == 0)
+        scatterM = float3(0, 0, 0);
+    else
+        scatterM = scatterR.xyz * ((scatterR.w) / (scatterR.x)) * (_ScatteringR.x / _ScatteringM.x) * (_ScatteringM.xyz / _ScatteringR.xyz);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -323,7 +489,7 @@ void ApproximateMieFromRayleigh(in float4 scatterR, out float3 scatterM)
 //-----------------------------------------------------------------------------------------
 void GatherSum2(out float3 gatheredLight, float2 coords)
 {
-	gatheredLight = GatherSumLUT2.SampleLevel(LinearClampSampler, coords, 0.0).rgb;
+	gatheredLight = _GatherSumLUT2.SampleLevel(LinearClampSampler, coords, 0.0).rgb;
 }
 
 //-----------------------------------------------------------------------------------------
@@ -348,9 +514,6 @@ ScatteringOutput IntegrateMultiScattering(float3 rayStart, float3 rayDir, float 
     previousScatterR = previousDensity.x * gatheredLight;
     previousScatterM = previousDensity.y * gatheredLight;
 
-	// P - current integration point
-	// C - camera position
-	// A - top of the atmosphere
 	[loop]
     for (int step = 1; step <= sampleCount; step += 1)
     {
@@ -363,7 +526,7 @@ ScatteringOutput IntegrateMultiScattering(float3 rayStart, float3 rayDir, float 
 
         transmittance = exp(-(totalDensity.x * _ExtinctionR.xyz + totalDensity.y * _ExtinctionM.xyz));
 
-        gatherUV.x = ParamHeight(height);
+        gatherUV = WorldParams2GatherSumLUTCoords(height, lightDir.y);
         GatherSum2(gatheredLight, gatherUV);
 
         currentScatterR = transmittance * currentDensity.x * gatheredLight;
@@ -410,7 +573,7 @@ void MultipleScatterLUT(uint3 id : SV_DispatchThreadID)
     ScatteringOutput scattering = IntegrateMultiScattering(rayStart, rayDir, rayLength, planetCenter, lightDir, height, coords);
 	
     _SkyboxLUT2[id.xyz] = float4(scattering.rayleigh.xyz, scattering.mie.x);
-	//_SkyboxLUT[id.xyz] += float4(scattering.rayleigh.xyz, scattering.mie.x);
+    _SkyboxLUT[id.xyz] += float4(scattering.rayleigh.xyz, scattering.mie.x);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -431,12 +594,10 @@ void ComputeAerialPerspInscatterAndTransmittance(float3 rayStart, float3 rayDir,
 	float height = length(rayStart - planetCenter) - _PlanetRadius;
 	float cos_s = dot(normalize(rayStart - planetCenter), lightDir);
 
-    float3 transZenith = _TransmittanceLUT.SampleLevel(LinearClampSampler, float2(ParamHeight(0.0), ParamSunDirection(1.0)), 0.0).xyz;
+    float3 transZenith = _TransmittanceLUT.SampleLevel(LinearClampSampler, WorldParams2TransmitLUTCoords(0.0, 1.0), 0.0).xyz;
     float3 sunRadiance = _LightColor.rgb / transZenith;
 
-	float2 gatherUV;
-	gatherUV.x = ParamHeight(height);
-	gatherUV.y = ParamSunDirection(cos_s);
+    float2 gatherUV = WorldParams2GatherSumLUTCoords(height, cos_s);
 
 	float3 transmittance;
 	float2 previousDensity, currentDensity, totalDensity;
@@ -461,8 +622,7 @@ void ComputeAerialPerspInscatterAndTransmittance(float3 rayStart, float3 rayDir,
 		height = length(p - planetCenter) - _PlanetRadius;
 		cos_s = dot(normalize(p - planetCenter), lightDir);
 
-		gatherUV.x = ParamHeight(height);
-		gatherUV.y = ParamSunDirection(cos_s);
+        gatherUV = WorldParams2GatherSumLUTCoords(height, cos_s);
 		GatherSum(gatheredLight, gatherUV);
 
 		currentDensity = exp(-(height.xx / _DensityScaleHeight.xy));

@@ -60,6 +60,8 @@ public class AtmosphericScattering : MonoBehaviour
     private RenderTexture _gatherSumLUT2 = null;
 
     private Vector3 _skyboxLUTSize = new Vector3(32, 128, 32);
+    private Vector2 _transmitLUTSize = new Vector2(32, 128);
+    private Vector2 _gatherSumLUTSize = new Vector2(32, 32);
 
     private Vector3 _inscatteringLUTSize = new Vector3(32, 32, 16);
     private RenderTexture _inscatteringLUT;
@@ -273,7 +275,7 @@ public class AtmosphericScattering : MonoBehaviour
     {
         if (_transmittanceLUT == null)
         {
-            _transmittanceLUT = new RenderTexture(32, 128, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _transmittanceLUT = new RenderTexture((int)_transmitLUTSize.x, (int)_transmitLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
             _transmittanceLUT.name = "TransmittanceLUT";
             _transmittanceLUT.filterMode = FilterMode.Bilinear;
             _transmittanceLUT.Create();
@@ -292,7 +294,7 @@ public class AtmosphericScattering : MonoBehaviour
     {
         if (_gatherSumLUT == null)
         {
-            _gatherSumLUT = new RenderTexture(32, 32, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _gatherSumLUT = new RenderTexture((int)_gatherSumLUTSize.x, (int)_gatherSumLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
             _gatherSumLUT.name = "GatherSumLUT";
             _gatherSumLUT.filterMode = FilterMode.Bilinear;
             _gatherSumLUT.Create();
@@ -310,7 +312,7 @@ public class AtmosphericScattering : MonoBehaviour
     {
         if (_gatherSumLUT2 == null)
         {
-            _gatherSumLUT2 = new RenderTexture(32, 32, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _gatherSumLUT2 = new RenderTexture((int)_gatherSumLUTSize.x, (int)_gatherSumLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
             _gatherSumLUT2.name = "GatherSumLUT2";
             _gatherSumLUT2.filterMode = FilterMode.Bilinear;
             _gatherSumLUT2.Create();
@@ -363,6 +365,10 @@ public class AtmosphericScattering : MonoBehaviour
 
         ScatteringComputeShader.SetVector("_LightColor", Sun.color * Sun.intensity);
         ScatteringComputeShader.SetFloat("_MieG", MieG);
+
+        ScatteringComputeShader.SetVector("_ScatterLUTSize", _skyboxLUTSize);
+        ScatteringComputeShader.SetVector("_TransmittanceLUTSize", _transmitLUTSize);
+        ScatteringComputeShader.SetVector("_GatherSumLUTSize", _gatherSumLUTSize);
     }
 
     /// <summary>
@@ -391,6 +397,10 @@ public class AtmosphericScattering : MonoBehaviour
         material.SetTexture("_SkyboxLUT", _skyboxLUT);
         material.SetTexture("_SkyboxLUT2", _skyboxLUT2);
         material.SetTexture("_SkyboxLUTSingle", _skyboxLUTSingle);
+
+        material.SetVector("_ScatterLUTSize", _skyboxLUTSize);
+        material.SetVector("_TransmittanceLUTSize", _transmitLUTSize);
+        material.SetVector("_GatherSumLUTSize", _gatherSumLUTSize);
     }
 
     /// <summary>
