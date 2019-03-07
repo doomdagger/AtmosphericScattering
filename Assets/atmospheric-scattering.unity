@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0, g: 0, b: 0, a: 1}
+  m_IndirectSpecularColor: {r: NaN, g: NaN, b: NaN, a: 1}
 --- !u!157 &3
 LightmapSettings:
   m_ObjectHideFlags: 0
@@ -268,13 +268,13 @@ Transform:
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 961490229}
-  m_LocalRotation: {x: 0.1615691, y: 0.80435675, z: -0.51243174, w: 0.2536127}
+  m_LocalRotation: {x: 0.025710085, y: 0.9662949, z: -0.10667993, w: 0.23287907}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 1
-  m_LocalEulerAnglesHint: {x: 65, y: 145, z: 0}
+  m_LocalEulerAnglesHint: {x: 12.6, y: 152.9, z: 0}
 --- !u!1001 &1014758108
 Prefab:
   m_ObjectHideFlags: 0
@@ -935,7 +935,7 @@ Transform:
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 1942086264}
   m_LocalRotation: {x: -0.24321032, y: -0.33036605, z: -0.0885213, w: 0.9076734}
-  m_LocalPosition: {x: 2721, y: 270, z: -2044}
+  m_LocalPosition: {x: 0, y: 270, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 1819247351}
@@ -970,11 +970,11 @@ MonoBehaviour:
   MieExtinctionCoef: 1
   MieG: 0.407
   DistanceScale: 3
-  HFBetaRayleighScatterCoef: 1
-  HFBetaMieScatterCoef: 1
-  HFBetaAbsorptionScatterCoef: 1
-  HFMieAsymmetry: 0.999
-  HFScaleHeight: 15000
+  HFBetaRayleighScatterCoef: 7
+  HFBetaMieScatterCoef: 6
+  HFBetaAbsorptionScatterCoef: 4
+  HFMieAsymmetry: 0.5
+  HFScaleHeight: 5000
   HFAlbedoR: {r: 1, g: 1, b: 1, a: 1}
   HFAlbedoM: {r: 1, g: 1, b: 1, a: 1}
   UpdateLightColor: 1

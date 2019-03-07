@@ -136,14 +136,12 @@
 				float depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
 				float linearDepth = Linear01Depth(depth);
 				
-				float4 inscatter;
-				float4 extinction;
-
-				float3 rayEnd = i.wpos;
 				float3 rayStart = _WorldSpaceCameraPos;
-				float3 rayDir = rayEnd - rayStart;
-				float distanceToCamera = length(rayDir);
-				rayDir /= distanceToCamera;
+				float3 rayDir = i.wpos - rayStart;
+				float3 rayEnd = rayStart + linearDepth * rayDir;
+				float distanceToCamera = length(linearDepth * rayDir);
+				
+				rayDir = normalize(rayDir);
 				float3 sunDir = normalize(-_LightDir.xyz);
 
 				float3 planetCenter = float3(0, -_PlanetRadius, 0);
@@ -154,11 +152,13 @@
 				float sunViewZenith = dot(rayDir, sunDir);
 				float sunZenith = dot(normal, sunDir);
 
+				float4 inscatter;
+				float4 extinction;
 				ComputeHeightFog(distanceToCamera, rayStartHeight, rayEndHeight, sunZenith, sunViewZenith, inscatter.xyz, extinction.xyz);
 
 				float4 color = tex2D(_Background, uv);
 				color.rgb = color.rgb * extinction.xyz + inscatter.xyz;
-				//color.rgb = inscatter.xyz;
+				//color.rgb = extinction.xyz;
 				return color;
 			}
 			ENDCG
