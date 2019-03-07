@@ -236,7 +236,7 @@ Light:
   serializedVersion: 8
   m_Type: 1
   m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
-  m_Intensity: 2
+  m_Intensity: 3.5
   m_Range: 10
   m_SpotAngle: 30
   m_CookieSize: 10
@@ -970,6 +970,13 @@ MonoBehaviour:
   MieExtinctionCoef: 1
   MieG: 0.407
   DistanceScale: 3
+  HFBetaRayleighScatterCoef: 1
+  HFBetaMieScatterCoef: 1
+  HFBetaAbsorptionScatterCoef: 1
+  HFMieAsymmetry: 0.999
+  HFScaleHeight: 15000
+  HFAlbedoR: {r: 1, g: 1, b: 1, a: 1}
+  HFAlbedoM: {r: 1, g: 1, b: 1, a: 1}
   UpdateLightColor: 1
   LightColorIntensity: 1
   UpdateAmbientColor: 1

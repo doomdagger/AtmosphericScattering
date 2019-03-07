@@ -34,6 +34,17 @@ static const float HeightPower = 0.5f;
 static const float ViewZenithPower = 0.2;
 static const float SunViewPower = 1.5f;
 
+// Height Fog
+float3 _HFBetaRs; // Scattering coef. of Rayleigh scattering [1/m]
+float _HFBetaMs; // Scattering coef. of Mie scattering [1/m]
+float _HFBetaMa; // Absorption coef. of Mie scattering [1/m]
+float _HFMieAsymmetry; // Asymmetry factor of Mie scattering [-]
+float _HFScaleHeight; // Scale Height [m]
+float3 _HFAlbedoR; // Control parameter of Rayleigh scattering color [-]
+float3 _HFAlbedoM; // Control parameter of Mie scattering color [-]
+sampler2D _SunlightLUT;
+sampler2D _SkylightLUT;
+
 //-----------------------------------------------------------------------------------------
 // GetCosHorizonAnlge
 //-----------------------------------------------------------------------------------------
@@ -303,7 +314,7 @@ void ApplyPhaseFunctionElek(inout float3 scatterR, inout float3 scatterM, float 
 //-----------------------------------------------------------------------------------------
 // ApproximateMieFromRayleigh
 //-----------------------------------------------------------------------------------------
-void ApproximateMieFromRayleigh(in float4 scatterR, inout float3 scatterM)
+void ApproximateMieFromRayleigh(in float4 scatterR, out float3 scatterM)
 {
     if (scatterR.x == 0)
         scatterM = float3(0, 0, 0);
@@ -396,7 +407,7 @@ half4 PrecomputeGatherSum(float2 coords)
         gathered += float4(scatterR.xyz + scatterM.xyz, 0.0);
     }
 
-    gathered *= 4.0 * PI / stepCount; // TODO: should multiply 4PI ??
+    gathered *= 4.0 * PI / stepCount;
     return gathered;
 }
 
@@ -414,4 +425,103 @@ void SunLimbDarkening(float normalizedCenter2Edge, inout float3 luminance)
     float3 factor = 1.0 - u * (1.0 - pow(mu, a));
     luminance *= factor;
 
+}
+
+//-----------------------------------------------------------------------------------------
+// PrecomputeSkylight
+//-----------------------------------------------------------------------------------------
+half4 PrecomputeSkylight(float2 coords)
+{
+    float stepCount = 64;
+    float stepSize = (2.0 * PI) / stepCount;
+
+    float3 viewDir, sunDir;
+    float cos_v, cos_s, height;
+
+    TransmitLUTCoords2WorldParams(coords, height, cos_s);
+    sunDir = GetDirectionFromCos(cos_s);
+
+    float4 skylight = 0;
+    float4 scatterR;
+    float3 scatterM;
+
+    float3 prevLookupCoords, currentLookupCoords;
+    prevLookupCoords = float3(0, -1, 0);
+
+    for (int step = 0; step < stepCount; step += 1)
+    {
+        cos_v = cos(step * stepSize);
+        viewDir = GetDirectionFromCos(cos_v);
+
+        currentLookupCoords = WorldParams2InsctrLUTCoords(height, cos_v, cos_s, prevLookupCoords);
+        scatterR = tex3D(_SkyboxLUT, currentLookupCoords);
+
+        prevLookupCoords = currentLookupCoords;
+
+        ApproximateMieFromRayleigh(scatterR, scatterM);
+        ApplyPhaseFunctionElek(scatterR.xyz, scatterM, dot(viewDir, sunDir));
+        
+        skylight += float4(scatterR.xyz + scatterM.xyz, 0.0) * max(0, dot(float3(0, 1, 0), viewDir));
+    }
+    
+    float3 transZenith = tex2D(_TransmittanceLUT, WorldParams2TransmitLUTCoords(0.0, 1.0)).xyz;
+    float3 outerLightIrrad = _LightIrradiance.rgb / transZenith;
+
+    skylight.xyz *= 4.0 * PI / stepCount * outerLightIrrad;
+    return skylight;
+}
+
+//-----------------------------------------------------------------------------------------
+// PrecomputeSkylight
+//-----------------------------------------------------------------------------------------
+half4 PrecomputeSunlight(float2 coords)
+{
+    float3 transZenith = tex2D(_TransmittanceLUT, WorldParams2TransmitLUTCoords(0.0, 1.0)).xyz;
+    float3 outerLightIrrad = _LightIrradiance.rgb / transZenith;
+
+    float3 transCurrent = tex2D(_TransmittanceLUT, coords).xyz;
+    return float4(outerLightIrrad * transCurrent, 0.0);
+}
+
+// Height Fog Started
+float Rayleigh(float mu)
+{
+    return 3.0 / 4.0 * 1.0 / (4.0 * PI) * (1.0 + mu * mu);
+}
+
+float Mie(float mu, float g)
+{
+  // Henyey-Greenstein phase function
+    return (1.0 - g * g) / ((4.0 * PI) * pow(1.0 + g * g - 2.0 * g * mu, 1.5));
+}
+
+/*
+  Calculates the in-scatter and transmittance of the height fog
+    Usage:
+    float3 background;
+    ...
+    float3 inscatter, transmittance;
+    HeightFog(.., inscatter, transmittance);
+    background = background * transmittance + inscatter;
+*/
+void ComputeHeightFog(float distanceToCamera, float rayStartHeight, float rayEndHeight, float cosSunAngle,
+                      float cosSunViewAngle, out float3 inscatter, out float3 extinction)
+{
+    float3 betaT = _HFBetaRs + (_HFBetaMs + _HFBetaMa);
+
+    // transmittance
+    float t = max(1e-2, (rayStartHeight - rayEndHeight) / _HFScaleHeight);
+    t = (1.0 - exp(-t)) / t * exp(-rayEndHeight / _HFScaleHeight);
+    extinction = exp(-distanceToCamera * t * betaT);
+
+    // inscatter
+    float3 singleSctrR = _HFAlbedoR * _HFBetaRs * Rayleigh(cosSunViewAngle);
+    float3 singleSctrM = _HFAlbedoM * _HFBetaMs * Mie(cosSunViewAngle, _HFMieAsymmetry);
+    float2 coords = WorldParams2TransmitLUTCoords(rayEndHeight, cosSunAngle);
+    float3 sunColor = tex2D(_SunlightLUT, coords).rgb;
+    float3 ambColor = tex2D(_SkylightLUT, coords).rgb;
+    inscatter = sunColor * (singleSctrR + singleSctrM);
+    inscatter += ambColor * (_HFBetaRs + _HFBetaMs);
+    inscatter /= betaT;
+    inscatter *= (1.0 - extinction);
 }

@@ -23,6 +23,15 @@ class AtmosphericScatteringEditor : Editor
     SerializedProperty RayleighScatterCoef;
     SerializedProperty MieScatterCoef;
     SerializedProperty MieG;
+    // height fog begin
+    SerializedProperty HFBetaRayleighScatterCoef;
+    SerializedProperty HFBetaMieScatterCoef;
+    SerializedProperty HFBetaAbsorptionScatterCoef;
+    SerializedProperty HFMieAsymmetry;
+    SerializedProperty HFScaleHeight;
+    SerializedProperty HFAlbedoR;
+    SerializedProperty HFAlbedoM;
+    // height fog end
     SerializedProperty RenderSun;
     SerializedProperty SunIntensity;
     SerializedProperty UpdateLightColor;
@@ -72,6 +81,15 @@ class AtmosphericScatteringEditor : Editor
         RayleighScatterCoef = serializedObject.FindProperty("RayleighScatterCoef");
         MieScatterCoef = serializedObject.FindProperty("MieScatterCoef");
         MieG = serializedObject.FindProperty("MieG");
+
+        HFBetaRayleighScatterCoef = serializedObject.FindProperty("HFBetaRayleighScatterCoef");
+        HFBetaMieScatterCoef = serializedObject.FindProperty("HFBetaMieScatterCoef");
+        HFBetaAbsorptionScatterCoef = serializedObject.FindProperty("HFBetaAbsorptionScatterCoef");
+        HFMieAsymmetry = serializedObject.FindProperty("HFMieAsymmetry");
+        HFScaleHeight = serializedObject.FindProperty("HFScaleHeight");
+        HFAlbedoR = serializedObject.FindProperty("HFAlbedoR");
+        HFAlbedoM = serializedObject.FindProperty("HFAlbedoM");
+
         RenderSun = serializedObject.FindProperty("RenderSun");
         SunIntensity = serializedObject.FindProperty("SunIntensity");
         UpdateLightColor = serializedObject.FindProperty("UpdateLightColor");
@@ -125,6 +143,15 @@ class AtmosphericScatteringEditor : Editor
             MieScatterCoef.floatValue = EditorGUILayout.Slider("Mie Coef (*)", MieScatterCoef.floatValue, 1, 15);
             MieG.floatValue = EditorGUILayout.Slider("MieG", MieG.floatValue, 0, 0.999f);
             DistanceScale.floatValue = EditorGUILayout.FloatField("Distance Scale", DistanceScale.floatValue);
+
+            HFBetaRayleighScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaRayleighScatterCoef", HFBetaRayleighScatterCoef.floatValue, 0, 10);
+            HFBetaMieScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaMieScatterCoef", HFBetaMieScatterCoef.floatValue, 0, 10);
+            HFBetaAbsorptionScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaAbsorptionScatterCoef", HFBetaAbsorptionScatterCoef.floatValue, 0, 10);
+            HFMieAsymmetry.floatValue = EditorGUILayout.Slider("HFMieAsymmetry", HFMieAsymmetry.floatValue, 0, 0.999f);
+            HFScaleHeight.floatValue = EditorGUILayout.FloatField("HFScaleHeight", HFScaleHeight.floatValue);
+            HFAlbedoR.colorValue = EditorGUILayout.ColorField(new GUIContent("HFAlbedoR"), HFAlbedoR.colorValue, false, false, true, new ColorPickerHDRConfig(0, 10, 0, 10));
+            HFAlbedoM.colorValue = EditorGUILayout.ColorField(new GUIContent("HFAlbedoM"), HFAlbedoM.colorValue, false, false, true, new ColorPickerHDRConfig(0, 10, 0, 10));
+
             GUILayout.Label("* - Change requires LookUp table update");
             if (GUILayout.Button("Update LookUp Tables") && a.IsInitialized())
                 ((AtmosphericScattering)target).CalculateAtmosphere();

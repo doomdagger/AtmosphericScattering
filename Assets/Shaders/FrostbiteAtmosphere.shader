@@ -139,24 +139,99 @@
 				float4 inscatter;
 				float4 extinction;
 
-				if (linearDepth > 0.99999)
-				{
-					inscatter = 0;
-					extinction = 1;
-				}
-				else
-				{
-					float3 wpos = i.wpos;
-					float3 rayStart = _WorldSpaceCameraPos;
-					float3 rayDir = normalize(wpos - _WorldSpaceCameraPos);
+				float3 rayEnd = i.wpos;
+				float3 rayStart = _WorldSpaceCameraPos;
+				float3 rayDir = rayEnd - rayStart;
+				float distanceToCamera = length(rayDir);
+				rayDir /= distanceToCamera;
+				float3 sunDir = normalize(-_LightDir.xyz);
 
-					inscatter = tex3D(_InscatteringLUT, float3(uv, linearDepth));
-					extinction = tex3D(_ExtinctionLUT, float3(uv, linearDepth));
-				}
+				float3 planetCenter = float3(0, -_PlanetRadius, 0);
+				float rayStartHeight = length(rayStart - planetCenter) - _PlanetRadius;
+				float rayEndHeight = length(rayEnd - planetCenter) - _PlanetRadius;
+				float3 normal = normalize(rayStart - planetCenter);
+
+				float sunViewZenith = dot(rayDir, sunDir);
+				float sunZenith = dot(normal, sunDir);
+
+				ComputeHeightFog(distanceToCamera, rayStartHeight, rayEndHeight, sunZenith, sunViewZenith, inscatter.xyz, extinction.xyz);
 
 				float4 color = tex2D(_Background, uv);
 				color.rgb = color.rgb * extinction.xyz + inscatter.xyz;
+				//color.rgb = inscatter.xyz;
 				return color;
+			}
+			ENDCG
+		}
+		
+		// pass 3 - skylight
+		Pass
+		{
+			CGPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag
+			#pragma target 4.0
+
+			struct appdata
+			{
+				float4 vertex : POSITION;
+				float2 uv : TEXCOORD0;
+			};
+
+			struct v2f
+			{
+				float2 uv : TEXCOORD0;
+				float4 vertex : SV_POSITION;
+			};
+
+			v2f vert (appdata v)
+			{
+				v2f o;
+				o.vertex = UnityObjectToClipPos(v.vertex);
+				o.uv = v.uv;
+				return o;
+			}
+			
+			half4 frag (v2f i) : SV_Target
+			{
+				half4 skylight = PrecomputeSkylight(i.uv);
+				return skylight;
+			}
+			ENDCG
+		}
+
+		// pass 4 - sunlight
+		Pass
+		{
+			CGPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag
+			#pragma target 4.0
+
+			struct appdata
+			{
+				float4 vertex : POSITION;
+				float2 uv : TEXCOORD0;
+			};
+
+			struct v2f
+			{
+				float2 uv : TEXCOORD0;
+				float4 vertex : SV_POSITION;
+			};
+
+			v2f vert (appdata v)
+			{
+				v2f o;
+				o.vertex = UnityObjectToClipPos(v.vertex);
+				o.uv = v.uv;
+				return o;
+			}
+			
+			half4 frag (v2f i) : SV_Target
+			{
+				half4 skylight = PrecomputeSunlight(i.uv);
+				return skylight;
 			}
 			ENDCG
 		}

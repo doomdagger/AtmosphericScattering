@@ -60,6 +60,9 @@ public class AtmosphericScattering : MonoBehaviour
     private RenderTexture _gatherSumLUT = null;
     private RenderTexture _gatherSumLUT2 = null;
 
+    private RenderTexture _sunlightLUT; // for now, same size with transmittance texture
+    private RenderTexture _skylightLUT;
+
     private Vector3 _skyboxLUTSize = new Vector3(32, 128, 32);
     private Vector2 _transmitLUTSize = new Vector2(32, 128);
     private Vector2 _gatherSumLUTSize = new Vector2(32, 32);
@@ -97,6 +100,19 @@ public class AtmosphericScattering : MonoBehaviour
     [Range(0.0f, 0.999f)]
     public float MieG = 0.76f;
     public float DistanceScale = 1;
+    [Range(1, 10.0f)]
+    public float HFBetaRayleighScatterCoef = 1;
+    [Range(1, 10.0f)]
+    public float HFBetaMieScatterCoef = 1;
+    [Range(1, 10.0f)]
+    public float HFBetaAbsorptionScatterCoef = 1;
+    [Range(0.0f, 0.999f)]
+    public float HFMieAsymmetry = 0.402f;
+    public float HFScaleHeight = 1200;
+    [ColorUsage(false, true, 0, 10, 0, 10)]
+    public Color HFAlbedoR = new Color(1, 1, 1, 1);
+    [ColorUsage(false, true, 0, 10, 0, 10)]
+    public Color HFAlbedoM = new Color(1, 1, 1, 1);
 
     public bool UpdateLightColor = true;
     [Range(0.5f, 3.0f)]
@@ -129,6 +145,10 @@ public class AtmosphericScattering : MonoBehaviour
     private readonly Vector4 RayleighSct = new Vector4(5.8f, 13.5f, 33.1f, 0.0f) * 0.000001f;
     private readonly Vector4 MieSct = new Vector4(5.0f, 5.0f, 5.0f, 0.0f) * 0.000001f;
     private readonly Vector4 OzoneExt = new Vector4(3.426f, 8.298f, 0.356f, 0.0f) * 0.000001f;
+
+    private readonly Vector3 HFBetaRayleighScatter = new Vector3(5.8f, 13.5f, 33.1f) * 0.000001f;
+    private readonly float HFBetaMieScatter = 2.0f * 0.000001f;
+    private readonly float HFBetaAbsorptionScatter = 1.0f * 0.000001f;
 
     private Vector4[] _FrustumCorners = new Vector4[4];
     public float SunIlluminance = 120000;
@@ -194,6 +214,7 @@ public class AtmosphericScattering : MonoBehaviour
         PrecomputeGatherSumAllTogether(); // add sum 3k into 1k
         PrecomputeSkyboxAlltogether();
         CreateFinalSkyboxLUT();
+        PrecomputeSkyAndSunlightRadiance();
     }
 
     private void InitializeAerialPerspLUTs()
@@ -404,6 +425,37 @@ public class AtmosphericScattering : MonoBehaviour
         SaveTextureAsKTX(_gatherSumLUT, "gathersum");
     }
 
+    private void PrecomputeSkyAndSunlightRadiance()
+    {
+        if (_skylightLUT == null)
+        {
+            _skylightLUT = new RenderTexture((int)_transmitLUTSize.x, (int)_transmitLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _skylightLUT.name = "SkylightLUT";
+            _skylightLUT.filterMode = FilterMode.Bilinear;
+            _skylightLUT.Create();
+        }
+        if (_sunlightLUT == null)
+        {
+            _sunlightLUT = new RenderTexture((int)_transmitLUTSize.x, (int)_transmitLUTSize.y, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _sunlightLUT.name = "SunlightLUT";
+            _sunlightLUT.filterMode = FilterMode.Bilinear;
+            _sunlightLUT.Create();
+        }
+
+        // draw sky light lut
+        _frostbiteMat.SetTexture("_SkyboxLUT", _skyboxLUT);
+        _frostbiteMat.SetTexture("_TransmittanceLUT", _transmittanceLUT);
+
+        Texture nullTexture = null;
+        Graphics.Blit(nullTexture, _skylightLUT, _frostbiteMat, 3);
+        SaveTextureAsKTX(_skylightLUT, "skylightlut");
+
+        // draw sun light lut
+        nullTexture = null;
+        Graphics.Blit(nullTexture, _sunlightLUT, _frostbiteMat, 4);
+        SaveTextureAsKTX(_sunlightLUT, "sunlightlut");
+    }
+
     /// <summary>
     /// 
     /// </summary>
@@ -458,6 +510,17 @@ public class AtmosphericScattering : MonoBehaviour
         material.SetVector("_ScatterLUTSize", _skyboxLUTSize);
         material.SetVector("_TransmittanceLUTSize", _transmitLUTSize);
         material.SetVector("_GatherSumLUTSize", _gatherSumLUTSize);
+
+        // height fog
+        material.SetVector("_HFBetaRs", HFBetaRayleighScatter * HFBetaRayleighScatterCoef);
+        material.SetFloat("_HFBetaMs", HFBetaMieScatter * HFBetaMieScatterCoef);
+        material.SetFloat("_HFBetaMa", HFBetaAbsorptionScatter * HFBetaAbsorptionScatterCoef);
+        material.SetFloat("_HFMieAsymmetry", HFMieAsymmetry);
+        material.SetFloat("_HFScaleHeight", HFScaleHeight);
+        material.SetVector("_HFAlbedoR", HFAlbedoR);
+        material.SetVector("_HFAlbedoM", HFAlbedoM);
+        material.SetTexture("_SunlightLUT", _sunlightLUT);
+        material.SetTexture("_SkylightLUT", _skylightLUT);
     }
 
     /// <summary>
