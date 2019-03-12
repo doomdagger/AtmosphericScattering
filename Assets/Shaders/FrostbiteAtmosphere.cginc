@@ -504,7 +504,7 @@ float Mie(float mu, float g)
     HeightFog(.., inscatter, transmittance);
     background = background * transmittance + inscatter;
 */
-void ComputeHeightFog(float distanceToCamera, float rayStartHeight, float rayEndHeight, float cosSunAngle,
+void ComputeHeightFog(float distanceToCamera, float rayStartHeight, float rayEndHeight, float3 sunColor, float3 ambColor,
                       float cosSunViewAngle, out float3 inscatter, out float3 extinction)
 {
     float3 betaT = _HFBetaRs + (_HFBetaMs + _HFBetaMa);
@@ -517,9 +517,7 @@ void ComputeHeightFog(float distanceToCamera, float rayStartHeight, float rayEnd
     // inscatter
     float3 singleSctrR = _HFAlbedoR * _HFBetaRs * Rayleigh(cosSunViewAngle);
     float3 singleSctrM = _HFAlbedoM * _HFBetaMs * Mie(cosSunViewAngle, _HFMieAsymmetry);
-    float2 coords = WorldParams2TransmitLUTCoords(rayStartHeight, cosSunAngle);
-    float3 sunColor = tex2D(_SunlightLUT, coords).rgb;
-    float3 ambColor = tex2D(_SkylightLUT, coords).rgb;
+    
     inscatter = sunColor * (singleSctrR + singleSctrM);
     inscatter += ambColor * (_HFBetaRs + _HFBetaMs);
     inscatter /= betaT;

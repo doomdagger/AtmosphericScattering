@@ -152,13 +152,17 @@
 				float sunViewZenith = dot(rayDir, sunDir);
 				float sunZenith = dot(normal, sunDir);
 
+				float2 coords = WorldParams2TransmitLUTCoords(rayStartHeight, sunZenith);
+				float3 sunColor = tex2D(_SunlightLUT, coords).rgb;
+				float3 ambColor = tex2D(_SkylightLUT, coords).rgb;
+
 				float4 inscatter;
 				float4 extinction;
-				ComputeHeightFog(distanceToCamera, rayStartHeight, rayEndHeight, sunZenith, sunViewZenith, inscatter.xyz, extinction.xyz);
+				ComputeHeightFog(distanceToCamera, rayStartHeight, rayEndHeight, sunColor, ambColor, sunViewZenith, inscatter.xyz, extinction.xyz);
 
 				float4 color = tex2D(_Background, uv);
 				color.rgb = color.rgb * extinction.xyz + inscatter.xyz;
-				//color.rgb = extinction.xyz;
+				//color.rgb = color.xyz * extinction.xyz;
 				return color;
 			}
 			ENDCG
