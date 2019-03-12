@@ -100,11 +100,11 @@ public class AtmosphericScattering : MonoBehaviour
     [Range(0.0f, 0.999f)]
     public float MieG = 0.76f;
     public float DistanceScale = 1;
-    [Range(1, 10.0f)]
+    [Range(1, 5000.0f)]
     public float HFBetaRayleighScatterCoef = 1;
-    [Range(1, 10.0f)]
+    [Range(1, 5000.0f)]
     public float HFBetaMieScatterCoef = 1;
-    [Range(1, 10.0f)]
+    [Range(1, 5000.0f)]
     public float HFBetaAbsorptionScatterCoef = 1;
     [Range(0.0f, 0.999f)]
     public float HFMieAsymmetry = 0.402f;

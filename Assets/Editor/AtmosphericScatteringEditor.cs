@@ -144,9 +144,9 @@ class AtmosphericScatteringEditor : Editor
             MieG.floatValue = EditorGUILayout.Slider("MieG", MieG.floatValue, 0, 0.999f);
             DistanceScale.floatValue = EditorGUILayout.FloatField("Distance Scale", DistanceScale.floatValue);
 
-            HFBetaRayleighScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaRayleighScatterCoef", HFBetaRayleighScatterCoef.floatValue, 0, 10);
-            HFBetaMieScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaMieScatterCoef", HFBetaMieScatterCoef.floatValue, 0, 10);
-            HFBetaAbsorptionScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaAbsorptionScatterCoef", HFBetaAbsorptionScatterCoef.floatValue, 0, 10);
+            HFBetaRayleighScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaRayleighScatterCoef", HFBetaRayleighScatterCoef.floatValue, 0, 5000);
+            HFBetaMieScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaMieScatterCoef", HFBetaMieScatterCoef.floatValue, 0, 5000);
+            HFBetaAbsorptionScatterCoef.floatValue = EditorGUILayout.Slider("HFBetaAbsorptionScatterCoef", HFBetaAbsorptionScatterCoef.floatValue, 0, 5000);
             HFMieAsymmetry.floatValue = EditorGUILayout.Slider("HFMieAsymmetry", HFMieAsymmetry.floatValue, 0, 0.999f);
             HFScaleHeight.floatValue = EditorGUILayout.FloatField("HFScaleHeight", HFScaleHeight.floatValue);
             HFAlbedoR.colorValue = EditorGUILayout.ColorField(new GUIContent("HFAlbedoR"), HFAlbedoR.colorValue, false, false, true, new ColorPickerHDRConfig(0, 10, 0, 10));
