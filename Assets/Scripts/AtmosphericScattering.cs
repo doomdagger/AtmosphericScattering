@@ -265,7 +265,7 @@ public class AtmosphericScattering : MonoBehaviour
         if (_cloud3DNoiseTexA == null)
             _cloud3DNoiseTexA = Resources.Load("enviro_clouds_base") as Texture3D;
         if (_cloud3DNoiseTexB == null)
-            _cloud3DNoiseTexB = Resources.Load("enviro_clouds_detail_low") as Texture3D;
+            _cloud3DNoiseTexB = Resources.Load("enviro_clouds_detail_high") as Texture3D;
         //ReadTextureFromKTX(_cloud3DNoiseTexA, "noiseShape");
         //ReadTextureFromKTX(_cloud3DNoiseTexB, "noiseErosion");
         CreateWeatherMap();

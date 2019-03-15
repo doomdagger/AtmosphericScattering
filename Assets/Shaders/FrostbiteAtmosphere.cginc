@@ -583,12 +583,12 @@ void AnimateCloud(inout float3 position, float heightFract)
     position += heightFract * windDir * cloudTopOffset;
     // Animate clouds in wind direction and add a small upward bias
     // to the wind direction
-    position += (windDir + float3(0, 1, 0)) * _WindSpeed * _Time.x;
+    position += (windDir + float3(0, 1, 0)) * _WindSpeed * _Time.x * 850;
 }
 
 float SampleCloudDensity(float3 position, float height, float3 weatherInfo, bool useSimpleSample)
 {
-    float BaseFreq = 1e-6;
+    float BaseFreq = 1e-4;
     // Get fraction height
     float heightFract = GetHeightFractionForPoint(height);
     // animate cloud
@@ -606,7 +606,7 @@ float SampleCloudDensity(float3 position, float height, float3 weatherInfo, bool
     // Apply the height function to the base cloud shape.
     baseCloud *= densityHeightGradient;
     // Cloud coverage is stored in weatherInfo's red channel
-    float cloudCoverage = weatherInfo.r;
+    float cloudCoverage = 1.0 - weatherInfo.r;
     // Use remap to apply the cloud coverage attribute
     float baseCloudWithCoverage = Remap(baseCloud, cloudCoverage, 1.0, 0.0, 1.0);
     // Apply cloud coverage
@@ -736,7 +736,7 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
         hitDistance = 0;
     }
     // clamp distance range
-    hitDistance.x = max(0.0, hitDistance.x);
+    hitDistance.x = min(2e3, hitDistance.x);
     hitDistance.y = min(1e4, hitDistance.y);
 
     float cosSunViewAngle = dot(rayDir, sunDir);
