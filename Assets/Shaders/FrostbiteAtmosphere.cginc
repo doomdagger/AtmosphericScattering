@@ -58,6 +58,8 @@ float3 _WindDirection;
 float _WindSpeed;
 float _SigmaScattering;
 float _SigmaExtinction;
+float _LowFreqUVScale;
+float _HighFreqUVScale;
 
 //-----------------------------------------------------------------------------------------
 // GetCosHorizonAnlge
@@ -586,12 +588,13 @@ void AnimateCloud(inout float3 position, float heightFract)
 
 float SampleCloudDensity(float3 position, float height, float3 weatherInfo, bool useSimpleSample)
 {
+    float BaseFreq = 1e-6;
     // Get fraction height
     float heightFract = GetHeightFractionForPoint(height);
     // animate cloud
     AnimateCloud(position, heightFract);
     // Read the low-frequency Perlin-Worley and Worley noises.
-    float4 lowFrequencyNoises = tex3D(_Cloud3DNoiseTexA, position).rgba;
+    float4 lowFrequencyNoises = tex3D(_Cloud3DNoiseTexA, position * BaseFreq * _LowFreqUVScale).rgba;
     // Build an FBM out of the low frequency Worley noises that can be 
     // used to add detail to the low-frequency Perlin-Worley noise.
     float lowFreqFBM = lowFrequencyNoises.g * 0.625f + lowFrequencyNoises.b * 0.25f + lowFrequencyNoises.a * 0.125f;
@@ -618,7 +621,7 @@ float SampleCloudDensity(float3 position, float height, float3 weatherInfo, bool
         // TODO: xy turbulence from curl noise
         // position.xy += curlNoise.xy * (1.0 - heightFract);
         // Sample high-frequency noises
-        float3 highFrequencyNoises = tex3D(_Cloud3DNoiseTexB, position * 0.1).rgb;
+        float3 highFrequencyNoises = tex3D(_Cloud3DNoiseTexB, position * BaseFreq * _HighFreqUVScale).rgb;
         // Build high-frequency Worley noise FBM
         float highFreqFBM = highFrequencyNoises.r * 0.625 + highFrequencyNoises.g * 0.25 + highFrequencyNoises.b * 0.125;
         // Transition from wispy shapes to billowy shapes over height
@@ -748,7 +751,6 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
     float height = length(position - planetCenter) - _PlanetRadius;
     
     float cloudTest = 0.0;
-    int zeroDensitySampleCount = 0;
     float3 scatteredLight = 0.0;
     float transmittance = 1.0;
     float sampleSigmaS, sampleSigmaE, Tr;
@@ -757,76 +759,45 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
     float3 sunLight, ambLight;
     float3 S, Sint;
     
+    float totalDensity = 0.0;
 
     stepCount = min(stepCount, 200);
     [loop]
     for (int i = 0; i < stepCount; i+=1)
     {
-        // cloudTest starts as zero so we always evaluate the second
-        // case from the beginning
+        // Sample density the cheap way
+        cloudTest = SampleCloudDensity(position, height, weatherInfo, true);
+        // if we are still potentially in the cloud
         if (cloudTest > 0.0)
         {
             // Sample density the expensive way
             sampledDensity = SampleCloudDensity(position, height, weatherInfo, false);
-            // if we just samples a zero, increment the counter
-            if (sampledDensity == 0.0)
-            {
-                zeroDensitySampleCount += 1;
-            }
-            // if we are still potentially in the cloud
-            if (zeroDensitySampleCount < 6)
-            {
-                if (sampledDensity != 0.0)
-                {
-                    // use current height, sun-------------->cloud-------------->camera
-                    //                          atmosphere          atmosphere
-                    lutCoords = WorldParams2TransmitLUTCoords(height, cosSunZenithAngle);
-                    sunLight = tex2D(_SunlightLUT, lutCoords).rgb;
-                    ambLight = tex2D(_SkylightLUT, lutCoords).rgb;
-                    // walks in the given direction from the start point and takes
-                    // 6 lighting samples inside the cone                   
-                    opticalDepthAlongCone = SampleCloudDensityAlongCone(position, sunDir, planetCenter);
-                    sunLight *= BeerPowder(opticalDepthAlongCone, weatherInfo.g);
+            totalDensity += sampledDensity;
+            
+            //// use current height, sun-------------->cloud-------------->camera
+            ////                          atmosphere          atmosphere
+            //lutCoords = WorldParams2TransmitLUTCoords(height, cosSunZenithAngle);
+            //sunLight = tex2D(_SunlightLUT, lutCoords).rgb;
+            //ambLight = tex2D(_SkylightLUT, lutCoords).rgb;
+            //// walks in the given direction from the start point and takes
+            //// 6 lighting samples inside the cone                   
+            //opticalDepthAlongCone = SampleCloudDensityAlongCone(position, sunDir, planetCenter);
+            //sunLight *= BeerPowder(opticalDepthAlongCone, weatherInfo.g);
                     
-                    sampleSigmaS = _SigmaScattering * sampledDensity;
-                    sampleSigmaE = _SigmaExtinction * sampledDensity;
-                    S = (sunLight * TwoLobesHGPhaseFunction(cosSunViewAngle) + ambLight) * sampleSigmaS;
-                    Tr = BeerPowder(sampleSigmaE * stepLength, weatherInfo.g);
-                    Sint = (S - S * Tr) / sampleSigmaE;
-                    scatteredLight += transmittance * Sint;
-                    transmittance *= Tr;
-                }
-            }
-            else
-            {
-                cloudTest = 0.0;
-                zeroDensitySampleCount = 0;
-            }
-            // update location info
-            position += step;
-            height = length(position - planetCenter) - _PlanetRadius;
-            weatherInfo = GetWeather(position);
+            //sampleSigmaS = _SigmaScattering * sampledDensity;
+            //sampleSigmaE = _SigmaExtinction * sampledDensity;
+            //S = (sunLight * TwoLobesHGPhaseFunction(cosSunViewAngle) + ambLight) * sampleSigmaS;
+            //Tr = BeerPowder(sampleSigmaE * stepLength, weatherInfo.g);
+            //Sint = (S - S * Tr) / sampleSigmaE;
+            //scatteredLight += transmittance * Sint;
+            //transmittance *= Tr;
         }
-        else
-        {
-            // Sample density the cheap way
-            cloudTest = SampleCloudDensity(position, height, weatherInfo, true);
-            if (cloudTest == 0.0)
-            {
-                // update location info
-                position += step;
-                height = length(position - planetCenter) - _PlanetRadius;
-                weatherInfo = GetWeather(position);
-            }
-            else
-            {
-                // supress current step, re-compute using full sample
-                // stepCount += 1;
-            }
-        }
-        
+        // update location info
+        position += step;
+        height = length(position - planetCenter) - _PlanetRadius;
+        weatherInfo = GetWeather(position);
     }
 
-    return float4(scatteredLight.xyz, transmittance);
+    return float4(totalDensity.xxx, 1.0);
 
 }

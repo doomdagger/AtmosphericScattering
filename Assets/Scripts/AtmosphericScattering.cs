@@ -73,6 +73,11 @@ public class AtmosphericScattering : MonoBehaviour
     private RenderTexture _inscatteringLUT;
     private RenderTexture _extinctionLUT;
 
+    private RenderTexture _weatherMap;
+    private RenderTexture _cloudTexture;
+    private Texture3D _cloud3DNoiseTexA;
+    private Texture3D _cloud3DNoiseTexB;
+
     private RenderTexture _skyboxLUT;
     private RenderTexture _skyboxLUT2;
     private RenderTexture _skyboxLUTSingle;
@@ -80,6 +85,7 @@ public class AtmosphericScattering : MonoBehaviour
     private int _skyboxCount = 1;
 
 	private Material _frostbiteMat;
+    private Material _weatherMat;
 
     private Camera _camera;
 
@@ -113,6 +119,14 @@ public class AtmosphericScattering : MonoBehaviour
     public Color HFAlbedoR = new Color(1, 1, 1, 1);
     [ColorUsage(false, true, 0, 10, 0, 10)]
     public Color HFAlbedoM = new Color(1, 1, 1, 1);
+
+    // Cloud Related
+    public Vector3 WindDirection = new Vector3(1.0f, 0.0f, 0.0f);
+    public float WindSpeed = 1.0f;
+    public float SigmaScattering = 0.1f;
+    public float SigmaExtinction = 0.1f;
+    public float LowFreqUVScale = 4.0f;
+    public float HighFreqUVScale = 4.0f;
 
     public bool UpdateLightColor = true;
     [Range(0.5f, 3.0f)]
@@ -155,6 +169,9 @@ public class AtmosphericScattering : MonoBehaviour
 
     private bool AerialPerspPersisted = false;
 
+    private readonly Vector2 cloudscapeRange = new Vector2(1500.0f, 4000.0f);
+
+
     /// <summary>
     /// 
     /// </summary>
@@ -165,8 +182,14 @@ public class AtmosphericScattering : MonoBehaviour
 			throw new Exception("Critical Error: \"Hidden/FrostbiteAtmosphere\" shader is missing. Make sure it is included in \"Always Included Shaders\" in ProjectSettings/Graphics.");
 		_frostbiteMat = new Material(shader);
 
+        shader = Shader.Find("Enviro/WeatherMap");
+        if (shader == null)
+            throw new Exception("Critical Error: \"Enviro/WeatherMap\" shader is missing. Make sure it is included in \"Always Included Shaders\" in ProjectSettings/Graphics.");
+        _weatherMat = new Material(shader);
+
         _camera = GetComponent<Camera>();
 
+        InitializeCloudRelated();
         CalculateAtmosphere();
 
         InitializeAerialPerspLUTs();
@@ -215,6 +238,49 @@ public class AtmosphericScattering : MonoBehaviour
         PrecomputeSkyboxAlltogether();
         CreateFinalSkyboxLUT();
         PrecomputeSkyAndSunlightRadiance();
+    }
+
+    private void CreateWeatherMap()
+    {
+        if (_weatherMap == null)
+        {
+            _weatherMap = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            _weatherMap.name = "WeatherMap";
+            _weatherMap.filterMode = FilterMode.Bilinear;
+            _weatherMap.wrapMode = TextureWrapMode.Repeat;
+            _weatherMap.Create();
+        }
+
+        _weatherMat.SetFloat("_Coverage", 0.7f);
+        _weatherMat.SetFloat("_Tiling", 7.0f);
+
+        Texture nullTexture = null;
+        Graphics.Blit(nullTexture, _weatherMap, _weatherMat, 0);
+
+        SaveTextureAsKTX(_weatherMap, "weathermap");
+    }
+
+    private void InitializeCloudRelated()
+    {
+        if (_cloud3DNoiseTexA == null)
+            _cloud3DNoiseTexA = Resources.Load("enviro_clouds_base") as Texture3D;
+        if (_cloud3DNoiseTexB == null)
+            _cloud3DNoiseTexB = Resources.Load("enviro_clouds_detail_low") as Texture3D;
+        //ReadTextureFromKTX(_cloud3DNoiseTexA, "noiseShape");
+        //ReadTextureFromKTX(_cloud3DNoiseTexB, "noiseErosion");
+        CreateWeatherMap();
+
+        if (_cloudTexture == null)
+        {
+            int width = (int)(Screen.width);
+            int height = (int)(Screen.height);
+
+            _cloudTexture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+            _cloudTexture.name = "CloudTexture";
+            _cloudTexture.filterMode = FilterMode.Bilinear;
+            _cloudTexture.wrapMode = TextureWrapMode.Clamp;
+            _cloudTexture.Create();
+        }
     }
 
     private void InitializeAerialPerspLUTs()
@@ -521,6 +587,18 @@ public class AtmosphericScattering : MonoBehaviour
         material.SetVector("_HFAlbedoM", HFAlbedoM);
         material.SetTexture("_SunlightLUT", _sunlightLUT);
         material.SetTexture("_SkylightLUT", _skylightLUT);
+
+        // cloud texture
+        material.SetVector("_CloudscapeRange", cloudscapeRange);
+        material.SetVector("_WindDirection", WindDirection);
+        material.SetFloat("_WindSpeed", WindSpeed);
+        material.SetFloat("_SigmaScattering", SigmaScattering);
+        material.SetFloat("_SigmaExtinction", SigmaExtinction);
+        material.SetTexture("_WeatherTex", _weatherMap);
+        material.SetTexture("_Cloud3DNoiseTexA", _cloud3DNoiseTexA);
+        material.SetTexture("_Cloud3DNoiseTexB", _cloud3DNoiseTexB);
+        material.SetFloat("_LowFreqUVScale", LowFreqUVScale);
+        material.SetFloat("_HighFreqUVScale", HighFreqUVScale);
     }
 
     /// <summary>
@@ -617,10 +695,14 @@ public class AtmosphericScattering : MonoBehaviour
     [ImageEffectOpaque]
     public void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        _frostbiteMat.SetTexture("_Background", source);
+        //_frostbiteMat.SetTexture("_Background", source);
 
         Texture nullTexture = null;
-        Graphics.Blit(nullTexture, destination, _frostbiteMat, 2);
+        //Graphics.Blit(nullTexture, destination, _frostbiteMat, 2);
+
+        // render cloud texture
+        Graphics.Blit(nullTexture, _cloudTexture, _frostbiteMat, 5);
+        Graphics.Blit(_cloudTexture, destination);
     }
 
     Texture2D ToTexture2D(RenderTexture rTex)
@@ -631,6 +713,40 @@ public class AtmosphericScattering : MonoBehaviour
 		tex.Apply();
 		return tex;
 	}
+
+    public void ReadTextureFromKTX(RenderTexture rtex, String name)
+    {
+        FileStream fs = new FileStream("Assets/Textures/" + name + ".ktx", FileMode.Open);
+        BinaryReader reader = new BinaryReader(fs);
+        // skip header and meta data
+        reader.ReadBytes(36);
+        int texWidth = (int)reader.ReadUInt32();
+        int texHeight = (int)reader.ReadUInt32();
+        int texDepth = (int)reader.ReadUInt32();
+        int channelCount = 4;
+        int channelSize = 1;
+        int texSize = texWidth * texHeight * texDepth;
+
+        if (rtex == null)
+        {
+            rtex = new RenderTexture(texWidth, texHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            rtex.volumeDepth = texDepth;
+            rtex.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
+            rtex.enableRandomWrite = true;
+            rtex.name = "Noise3DTex";
+            rtex.filterMode = FilterMode.Trilinear;
+            rtex.wrapMode = TextureWrapMode.Repeat;
+            rtex.Create();
+        }
+        reader.ReadBytes(16);
+        int bufferSize = (int)reader.ReadUInt32();
+
+        ComputeBuffer buffer = new ComputeBuffer(texSize, channelSize * channelCount); // 4 bytes for float and 4 channels
+        buffer.SetData(reader.ReadBytes(bufferSize));
+        CBUtility.WriteIntoRenderTexture(rtex, channelCount, buffer, FrostbiteWriteShader);
+
+        buffer.Release();
+    }
 
     public void SaveTextureAsKTX(RenderTexture rtex, String name, bool tile3D = false)
     {

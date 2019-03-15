@@ -32,6 +32,14 @@ class AtmosphericScatteringEditor : Editor
     SerializedProperty HFAlbedoR;
     SerializedProperty HFAlbedoM;
     // height fog end
+    // cloud begin
+    SerializedProperty WindDirection;
+    SerializedProperty WindSpeed;
+    SerializedProperty SigmaScattering;
+    SerializedProperty SigmaExtinction;
+    SerializedProperty LowFreqUVScale;
+    SerializedProperty HighFreqUVScale;
+    // cloud end
     SerializedProperty RenderSun;
     SerializedProperty SunIntensity;
     SerializedProperty UpdateLightColor;
@@ -89,6 +97,13 @@ class AtmosphericScatteringEditor : Editor
         HFScaleHeight = serializedObject.FindProperty("HFScaleHeight");
         HFAlbedoR = serializedObject.FindProperty("HFAlbedoR");
         HFAlbedoM = serializedObject.FindProperty("HFAlbedoM");
+
+        WindDirection = serializedObject.FindProperty("WindDirection");
+        WindSpeed = serializedObject.FindProperty("WindSpeed");
+        SigmaScattering = serializedObject.FindProperty("SigmaScattering");
+        SigmaExtinction = serializedObject.FindProperty("SigmaExtinction");
+        LowFreqUVScale = serializedObject.FindProperty("LowFreqUVScale");
+        HighFreqUVScale = serializedObject.FindProperty("HighFreqUVScale");
 
         RenderSun = serializedObject.FindProperty("RenderSun");
         SunIntensity = serializedObject.FindProperty("SunIntensity");
@@ -151,6 +166,13 @@ class AtmosphericScatteringEditor : Editor
             HFScaleHeight.floatValue = EditorGUILayout.FloatField("HFScaleHeight", HFScaleHeight.floatValue);
             HFAlbedoR.colorValue = EditorGUILayout.ColorField(new GUIContent("HFAlbedoR"), HFAlbedoR.colorValue, false, false, true, new ColorPickerHDRConfig(0, 10, 0, 10));
             HFAlbedoM.colorValue = EditorGUILayout.ColorField(new GUIContent("HFAlbedoM"), HFAlbedoM.colorValue, false, false, true, new ColorPickerHDRConfig(0, 10, 0, 10));
+
+            WindDirection.vector3Value = EditorGUILayout.Vector3Field("Wind Direction", WindDirection.vector3Value);
+            WindSpeed.floatValue = EditorGUILayout.Slider("Wind Speed", WindSpeed.floatValue, 0, 10);
+            SigmaScattering.floatValue = EditorGUILayout.FloatField("Cloud Scattering", SigmaScattering.floatValue);
+            SigmaExtinction.floatValue = EditorGUILayout.FloatField("Cloud Extinction", SigmaExtinction.floatValue);
+            LowFreqUVScale.floatValue = EditorGUILayout.Slider("Low Freq UV Scale", LowFreqUVScale.floatValue, 1.0f, 10.0f);
+            HighFreqUVScale.floatValue = EditorGUILayout.Slider("High Freq UV Scale", HighFreqUVScale.floatValue, 1.0f, 10.0f);
 
             GUILayout.Label("* - Change requires LookUp table update");
             if (GUILayout.Button("Update LookUp Tables") && a.IsInitialized())
