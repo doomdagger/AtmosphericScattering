@@ -977,6 +977,12 @@ MonoBehaviour:
   HFScaleHeight: 5000
   HFAlbedoR: {r: 1, g: 1, b: 1, a: 1}
   HFAlbedoM: {r: 1, g: 1, b: 1, a: 1}
+  WindDirection: {x: 1, y: 0, z: 0}
+  WindSpeed: 1
+  SigmaScattering: 0.1
+  SigmaExtinction: 0.1
+  LowFreqUVScale: 3.5
+  HighFreqUVScale: 5
   UpdateLightColor: 1
   LightColorIntensity: 1
   UpdateAmbientColor: 1

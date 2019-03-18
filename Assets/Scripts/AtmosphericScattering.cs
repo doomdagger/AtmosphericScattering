@@ -169,7 +169,7 @@ public class AtmosphericScattering : MonoBehaviour
 
     private bool AerialPerspPersisted = false;
 
-    private readonly Vector2 cloudscapeRange = new Vector2(1500.0f, 4000.0f);
+    private readonly Vector2 cloudscapeRange = new Vector2(2500.0f, 5000.0f);
 
 
     /// <summary>
@@ -251,7 +251,7 @@ public class AtmosphericScattering : MonoBehaviour
             _weatherMap.Create();
         }
 
-        _weatherMat.SetFloat("_Coverage", 0.7f);
+        _weatherMat.SetFloat("_Coverage", -0.12f);
         _weatherMat.SetFloat("_Tiling", 7.0f);
 
         Texture nullTexture = null;
@@ -265,15 +265,15 @@ public class AtmosphericScattering : MonoBehaviour
         if (_cloud3DNoiseTexA == null)
             _cloud3DNoiseTexA = Resources.Load("enviro_clouds_base") as Texture3D;
         if (_cloud3DNoiseTexB == null)
-            _cloud3DNoiseTexB = Resources.Load("enviro_clouds_detail_high") as Texture3D;
+            _cloud3DNoiseTexB = Resources.Load("enviro_clouds_detail_low") as Texture3D;
         //ReadTextureFromKTX(_cloud3DNoiseTexA, "noiseShape");
         //ReadTextureFromKTX(_cloud3DNoiseTexB, "noiseErosion");
         CreateWeatherMap();
 
         if (_cloudTexture == null)
         {
-            int width = (int)(Screen.width);
-            int height = (int)(Screen.height);
+            int width = (int)(Screen.width / 4.0);
+            int height = (int)(Screen.height / 4.0);
 
             _cloudTexture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
             _cloudTexture.name = "CloudTexture";
@@ -599,6 +599,8 @@ public class AtmosphericScattering : MonoBehaviour
         material.SetTexture("_Cloud3DNoiseTexB", _cloud3DNoiseTexB);
         material.SetFloat("_LowFreqUVScale", LowFreqUVScale);
         material.SetFloat("_HighFreqUVScale", HighFreqUVScale);
+
+        material.SetTexture("_CloudTexture", _cloudTexture);
     }
 
     /// <summary>
@@ -609,6 +611,11 @@ public class AtmosphericScattering : MonoBehaviour
         if (RenderSettings.skybox != null)
         {
             RenderSettings.skybox.SetVector("_CameraPos", _camera.transform.position);
+
+            // render cloud texture
+            Texture nullTexture = null;
+            Graphics.Blit(nullTexture, _cloudTexture, _frostbiteMat, 5);
+
             UpdateMaterialParameters(RenderSettings.skybox);
             if (RenderingMode == RenderMode.Reference)
                 RenderSettings.skybox.EnableKeyword("ATMOSPHERE_REFERENCE");
@@ -697,12 +704,8 @@ public class AtmosphericScattering : MonoBehaviour
     {
         //_frostbiteMat.SetTexture("_Background", source);
 
-        Texture nullTexture = null;
+        //Texture nullTexture = null;
         //Graphics.Blit(nullTexture, destination, _frostbiteMat, 2);
-
-        // render cloud texture
-        Graphics.Blit(nullTexture, _cloudTexture, _frostbiteMat, 5);
-        Graphics.Blit(_cloudTexture, destination);
     }
 
     Texture2D ToTexture2D(RenderTexture rTex)

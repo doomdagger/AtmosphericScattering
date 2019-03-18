@@ -61,6 +61,8 @@ float _SigmaExtinction;
 float _LowFreqUVScale;
 float _HighFreqUVScale;
 
+sampler2D _CloudTexture;
+
 //-----------------------------------------------------------------------------------------
 // GetCosHorizonAnlge
 //-----------------------------------------------------------------------------------------
@@ -572,7 +574,7 @@ float GetDensityHeightGradientForPoint(float heightFract, float cloudType)
 
 float Remap(float original_value, float original_min, float original_max, float new_min, float new_max)
 {
-    return new_min + (original_value - original_min) / (original_max - original_min) * (new_max - new_min);
+    return new_min + saturate((original_value - original_min) / (original_max - original_min) * (new_max - new_min));
 }
 
 void AnimateCloud(inout float3 position, float heightFract)
@@ -583,18 +585,20 @@ void AnimateCloud(inout float3 position, float heightFract)
     position += heightFract * windDir * cloudTopOffset;
     // Animate clouds in wind direction and add a small upward bias
     // to the wind direction
-    position += (windDir + float3(0, 1, 0)) * _WindSpeed * _Time.x * 850;
+    position += (windDir + float3(0, 1, 0)) * _WindSpeed * _Time.x * 1000;
 }
 
 float SampleCloudDensity(float3 position, float height, float3 weatherInfo, bool useSimpleSample)
 {
     float BaseFreq = 1e-4;
-    // Get fraction height
+	float3 coordOffset = float3(0.1 * 20, -_Time.x * 0.15, 0.092 * 20);
+	//float3 coordOffset = 0.0;
+	// Get fraction height
     float heightFract = GetHeightFractionForPoint(height);
     // animate cloud
     AnimateCloud(position, heightFract);
     // Read the low-frequency Perlin-Worley and Worley noises.
-    float4 lowFrequencyNoises = tex3D(_Cloud3DNoiseTexA, position * BaseFreq * _LowFreqUVScale).rgba;
+    float4 lowFrequencyNoises = tex3D(_Cloud3DNoiseTexA, position * BaseFreq * _LowFreqUVScale + coordOffset).rgba;
     // Build an FBM out of the low frequency Worley noises that can be 
     // used to add detail to the low-frequency Perlin-Worley noise.
     float lowFreqFBM = lowFrequencyNoises.g * 0.625f + lowFrequencyNoises.b * 0.25f + lowFrequencyNoises.a * 0.125f;
@@ -610,25 +614,25 @@ float SampleCloudDensity(float3 position, float height, float3 weatherInfo, bool
     // Use remap to apply the cloud coverage attribute
     float baseCloudWithCoverage = Remap(baseCloud, cloudCoverage, 1.0, 0.0, 1.0);
     // Apply cloud coverage
-    baseCloudWithCoverage *= cloudCoverage;
+    baseCloudWithCoverage *= baseCloudWithCoverage;
     // whether use full sample or not
     if (useSimpleSample)
     {
-        return baseCloudWithCoverage;
+        return saturate(baseCloudWithCoverage);
     }
     else
     {
         // TODO: xy turbulence from curl noise
         // position.xy += curlNoise.xy * (1.0 - heightFract);
         // Sample high-frequency noises
-        float3 highFrequencyNoises = tex3D(_Cloud3DNoiseTexB, position * BaseFreq * _HighFreqUVScale).rgb;
+        float3 highFrequencyNoises = tex3D(_Cloud3DNoiseTexB, position * BaseFreq * _HighFreqUVScale + coordOffset).rgb;
         // Build high-frequency Worley noise FBM
         float highFreqFBM = highFrequencyNoises.r * 0.625 + highFrequencyNoises.g * 0.25 + highFrequencyNoises.b * 0.125;
         // Transition from wispy shapes to billowy shapes over height
         float highFreqNoiseModifier = lerp(highFreqFBM, 1.0 - highFreqFBM, saturate(heightFract * 10.0));
         // Erode the base cloud shape with the high-frequency Worley noises
         float finalCloud = Remap(baseCloudWithCoverage, highFreqNoiseModifier * 0.2, 1.0, 0.0, 1.0);
-        return finalCloud;
+        return saturate(finalCloud);
     }
 }
 
@@ -647,16 +651,21 @@ float TwoLobesHGPhaseFunction(float cosSunViewAngle)
     return lerp(HenyeyGreenstein(cosSunViewAngle, g0), HenyeyGreenstein(cosSunViewAngle, g1), alpha);
 }
 
-float BeerPowder(float opticalDepth, float precipitation)
+float Beer(float opticalDepth, float precipitation)
 {
-    float beer = exp(-opticalDepth * precipitation);
-    float powder =1.0 - saturate(exp(-2.0 * opticalDepth));
-    return beer * powder;
+    float beer = exp(-opticalDepth);
+	return beer;
+}
+
+float Powder(float opticalDepth)
+{
+	float powder =1.0 - saturate(exp(-2.0 * opticalDepth));
+	return powder;
 }
 
 float SampleCloudDensityAlongCone(float3 position, float3 sunDir, float3 planetCenter)
 {
-    const float LightSampleLength = 100.0f;
+    const float LightSampleLength = 10.0;
     float3 lightStep = sunDir * LightSampleLength;
     // How wide to make the cone
     float coneSpreadMultiplier = LightSampleLength;
@@ -695,8 +704,9 @@ float SampleCloudDensityAlongCone(float3 position, float3 sunDir, float3 planetC
     
     curSampleDensity = SampleCloudDensity(position, height, weatherInfo, true);
     opticalDepth += curSampleDensity * (LightSampleLength * 3.0);
+	densityAlongCone += curSampleDensity;
 
-    return opticalDepth;
+    return densityAlongCone;
 }
 
 float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 planetCenter)
@@ -726,18 +736,21 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
     // camera above cloudscape top
     else if (rayStartHeight > _CloudscapeRange.y)
     {
-        // TODO: skip for now
-        hitDistance = 0;
+		// do not compute anything
+		return 0.0;
     }
     // camera inside cloudscape
     else
     {
-        // TODO: skip for now
-        hitDistance = 0;
+		// do not compute anything
+		return 0.0;
     }
     // clamp distance range
-    hitDistance.x = min(2e3, hitDistance.x);
-    hitDistance.y = min(1e4, hitDistance.y);
+	hitDistance.x = max(0.0, hitDistance.x);
+	// TODO: remove in the future
+	//hitDistance.y = min(1e4, hitDistance.y);
+	if (hitDistance.y - hitDistance.x < 0.0)
+		return 0.0;
 
     float cosSunViewAngle = dot(rayDir, sunDir);
     float cosSunZenithAngle = dot(normal, sunDir);
@@ -760,8 +773,10 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
     float3 S, Sint;
     
     float totalDensity = 0.0;
+	float opticalDepth = 0.0;
+	lutCoords = WorldParams2TransmitLUTCoords(0.0, 1.0);
+	float3 BaseSunIrradiance = _LightIrradiance.rgb / tex2D(_TransmittanceLUT, lutCoords);
 
-    stepCount = min(stepCount, 200);
     [loop]
     for (int i = 0; i < stepCount; i+=1)
     {
@@ -773,24 +788,25 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
             // Sample density the expensive way
             sampledDensity = SampleCloudDensity(position, height, weatherInfo, false);
             totalDensity += sampledDensity;
-            
-            //// use current height, sun-------------->cloud-------------->camera
-            ////                          atmosphere          atmosphere
-            //lutCoords = WorldParams2TransmitLUTCoords(height, cosSunZenithAngle);
-            //sunLight = tex2D(_SunlightLUT, lutCoords).rgb;
+			opticalDepth += sampledDensity * stepLength;
+            // use current height, sun-------------->cloud-------------->camera
+            //                          atmosphere          atmosphere
+            lutCoords = WorldParams2TransmitLUTCoords(height, cosSunZenithAngle);
+            sunLight = BaseSunIrradiance * tex2D(_TransmittanceLUT, lutCoords).rgb;
             //ambLight = tex2D(_SkylightLUT, lutCoords).rgb;
-            //// walks in the given direction from the start point and takes
-            //// 6 lighting samples inside the cone                   
-            //opticalDepthAlongCone = SampleCloudDensityAlongCone(position, sunDir, planetCenter);
-            //sunLight *= BeerPowder(opticalDepthAlongCone, weatherInfo.g);
-                    
-            //sampleSigmaS = _SigmaScattering * sampledDensity;
-            //sampleSigmaE = _SigmaExtinction * sampledDensity;
-            //S = (sunLight * TwoLobesHGPhaseFunction(cosSunViewAngle) + ambLight) * sampleSigmaS;
-            //Tr = BeerPowder(sampleSigmaE * stepLength, weatherInfo.g);
-            //Sint = (S - S * Tr) / sampleSigmaE;
-            //scatteredLight += transmittance * Sint;
-            //transmittance *= Tr;
+            // walks in the given direction from the start point and takes
+            // 6 lighting samples inside the cone                   
+            opticalDepthAlongCone = SampleCloudDensityAlongCone(position, sunDir, planetCenter);
+            sunLight *= Beer(opticalDepthAlongCone, weatherInfo.g) * Powder(opticalDepthAlongCone) * 2.0;
+			//sunLight = float3(100, 100, 100);
+			ambLight = 0.0;
+            sampleSigmaS = (2e-2) * sampledDensity;
+            sampleSigmaE = (2e-2) * sampledDensity + 0.0000001;
+            S = (sunLight * TwoLobesHGPhaseFunction(cosSunViewAngle) + ambLight) * sampleSigmaS;
+            Tr = Beer(sampleSigmaE * stepLength, weatherInfo.g);
+            Sint = (S - S * Tr) / (sampleSigmaE);
+            scatteredLight += transmittance * Sint;
+            transmittance *= Tr;
         }
         // update location info
         position += step;
@@ -798,6 +814,6 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
         weatherInfo = GetWeather(position);
     }
 
-    return float4(totalDensity.xxx, 1.0);
+    return float4(scatteredLight, 1.0 - exp(-2 * 0.005f * opticalDepth));
 
 }
