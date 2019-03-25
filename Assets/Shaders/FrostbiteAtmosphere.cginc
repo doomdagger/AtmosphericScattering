@@ -709,6 +709,29 @@ float SampleCloudDensityAlongCone(float3 position, float3 sunDir, float3 planetC
     return densityAlongCone;
 }
 
+float exponential_integral(float z)
+{
+    return 0.5772156649015328606065 + log(1e-4 + abs(z)) + z * (1.0 + z * (0.25 + z * ((1.0 / 18.0) + z * ((1.0 / 96.0) + z * (1.0 / 600.0))))); // For x!=0
+}
+
+float3 CalculateAmbientLighting(float height, float3 sunlight, float3 skylight, float extinction_coeff)
+{
+    float3 CloudTopColor = float3(0.93, 0.93, 0.93);
+    float3 CloudBaseColor = float3(0.93, 0.93, 0.93);
+
+    float heightFract = GetHeightFractionForPoint(height);
+
+    float ambient_term = 0.6 * saturate(1.0 - heightFract);
+    float3 isotropic_scattering_top = (CloudTopColor.rgb * sunlight.rgb) * max(0.0, exp(ambient_term) - ambient_term * exponential_integral(ambient_term));
+
+    ambient_term = -extinction_coeff * heightFract;
+    float3 isotropic_scattering_bottom = (CloudBaseColor.rgb * skylight.rgb) * max(0.0, exp(ambient_term) - ambient_term * exponential_integral(ambient_term)) * 1.5;
+
+    isotropic_scattering_top *= saturate(heightFract);
+
+    return isotropic_scattering_bottom + isotropic_scattering_top;
+}
+
 float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 planetCenter)
 {
     float2 hitDistance;
@@ -769,13 +792,13 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
     float sampleSigmaS, sampleSigmaE, Tr;
     float sampledDensity, opticalDepthAlongCone;
     float2 lutCoords;
-    float3 sunLight, ambLight;
+    float3 sunLight, ambLight, skyLight;
     float3 S, Sint;
     
     float totalDensity = 0.0;
 	float opticalDepth = 0.0;
 	lutCoords = WorldParams2TransmitLUTCoords(0.0, 1.0);
-	float3 BaseSunIrradiance = _LightIrradiance.rgb / tex2D(_TransmittanceLUT, lutCoords);
+	float3 BaseSunIrradiance = _LightIrradiance.rgb / tex2D(_TransmittanceLUT, lutCoords).rgb;
 
     [loop]
     for (int i = 0; i < stepCount; i+=1)
@@ -793,13 +816,14 @@ float4 RaymarchingCloud(float3 rayStart, float3 rayDir, float3 sunDir, float3 pl
             //                          atmosphere          atmosphere
             lutCoords = WorldParams2TransmitLUTCoords(height, cosSunZenithAngle);
             sunLight = BaseSunIrradiance * tex2D(_TransmittanceLUT, lutCoords).rgb;
-            //ambLight = tex2D(_SkylightLUT, lutCoords).rgb;
+            skyLight = tex2D(_SkylightLUT, lutCoords).rgb;
+            ambLight = CalculateAmbientLighting(height, sunLight, skyLight, 2e-2);
             // walks in the given direction from the start point and takes
             // 6 lighting samples inside the cone                   
             opticalDepthAlongCone = SampleCloudDensityAlongCone(position, sunDir, planetCenter);
             sunLight *= Beer(opticalDepthAlongCone, weatherInfo.g) * Powder(opticalDepthAlongCone) * 2.0;
-			//sunLight = float3(100, 100, 100);
-			ambLight = 0.0;
+            ambLight *= Powder(opticalDepthAlongCone) * 0.2;
+
             sampleSigmaS = (2e-2) * sampledDensity;
             sampleSigmaE = (2e-2) * sampledDensity + 0.0000001;
             S = (sunLight * TwoLobesHGPhaseFunction(cosSunViewAngle) + ambLight) * sampleSigmaS;

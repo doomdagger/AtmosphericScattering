@@ -266,6 +266,8 @@ public class AtmosphericScattering : MonoBehaviour
             _cloud3DNoiseTexA = Resources.Load("enviro_clouds_base") as Texture3D;
         if (_cloud3DNoiseTexB == null)
             _cloud3DNoiseTexB = Resources.Load("enviro_clouds_detail_low") as Texture3D;
+
+        SaveTex3DAsKTX(_cloud3DNoiseTexA, _cloud3DNoiseTexB, false);
         //ReadTextureFromKTX(_cloud3DNoiseTexA, "noiseShape");
         //ReadTextureFromKTX(_cloud3DNoiseTexB, "noiseErosion");
         CreateWeatherMap();
@@ -702,10 +704,10 @@ public class AtmosphericScattering : MonoBehaviour
     [ImageEffectOpaque]
     public void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        //_frostbiteMat.SetTexture("_Background", source);
+        _frostbiteMat.SetTexture("_Background", source);
 
-        //Texture nullTexture = null;
-        //Graphics.Blit(nullTexture, destination, _frostbiteMat, 2);
+        Texture nullTexture = null;
+        Graphics.Blit(nullTexture, destination, _frostbiteMat, 2);
     }
 
     Texture2D ToTexture2D(RenderTexture rTex)
@@ -750,6 +752,129 @@ public class AtmosphericScattering : MonoBehaviour
 
         buffer.Release();
     }
+
+    float Remap(float original_value, float original_min, float original_max, float new_min, float new_max)
+    {
+        return new_min + Mathf.Min(1.0f, Mathf.Max(0.0f, (original_value - original_min) / (original_max - original_min) * (new_max - new_min)));
+    }
+
+
+    public void SaveTex3DAsKTX(Texture3D baseShapeTex, Texture3D detailSubTex, bool tile3D)
+    {
+        // deal with base first
+        int width = baseShapeTex.width;
+        int height = baseShapeTex.height;
+        int depth = baseShapeTex.depth;
+
+        Color[] pixels = baseShapeTex.GetPixels();
+
+        float[] buffer = new float[pixels.Length];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            Color cell = pixels[i];
+            float lowFreqFBM = cell.g * 0.625f + cell.b * 0.25f + cell.a * 0.125f;
+            float baseCloud = Remap(cell.r, -(1.0f - lowFreqFBM), 1.0f, 0.0f, 1.0f);
+            buffer[i] = baseCloud;
+        }
+        SaveCloudTexAsKTX(width, height, depth, buffer, "cloudbaseshape", tile3D);
+
+        // then deal with detail
+        width = detailSubTex.width;
+        height = detailSubTex.height;
+        depth = detailSubTex.depth;
+
+        pixels = detailSubTex.GetPixels();
+
+        buffer = new float[pixels.Length];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            Color cell = pixels[i];
+            float highFreqFBM = cell.r * 0.625f + cell.g * 0.25f + cell.b * 0.125f;
+            buffer[i] = highFreqFBM;
+        }
+        SaveCloudTexAsKTX(width, height, depth, buffer, "clouddetailsub", tile3D);
+    }
+
+    private void SaveCloudTexAsKTX(int origWidth, int origHeight, int origDepth, float[] data, String name, bool tile3D)
+    {
+        int texWidth = origWidth;
+        int texHeight = origHeight;
+        int texDepth = origDepth;
+
+        int channels = 1;
+
+        bool tileEnabled = tile3D && texDepth > 1;
+        if (tileEnabled)
+        {
+            texWidth *= texDepth;
+            texDepth = 1;
+        }
+
+
+        int texSize = texWidth * texHeight * texDepth;
+
+        Byte[] header = {
+            0xAB, 0x4B, 0x54, 0x58, // first four bytes of Byte[12] identifier
+			0x20, 0x31, 0x31, 0xBB, // next four bytes of Byte[12] identifier
+			0x0D, 0x0A, 0x1A, 0x0A, // final four bytes of Byte[12] identifier
+			0x01, 0x02, 0x03, 0x04, // Byte[4] endianess (Big endian in this case)
+		};
+
+        FileStream fs = new FileStream("Assets/Textures/" + name + ".ktx", FileMode.OpenOrCreate);
+        BinaryWriter writer = new BinaryWriter(fs);
+        writer.Write(header);
+
+        UInt32 glType = 0x140B; // HALF
+        UInt32 glTypeSize = 2; // 2 bytes
+        UInt32 glFormat = 0x1903; // RED
+        UInt32 glInterformat = 0x822D; // R_FLOAT16
+        UInt32 glBaseInternalFormat = 0x1903; // RED
+        UInt32 width = (UInt32)texWidth;
+        UInt32 height = (UInt32)texHeight;
+        UInt32 depth = (UInt32)(texDepth == 1 ? 0 : texDepth);
+        UInt32 numOfArrElem = 0;
+        UInt32 numOfFace = 1;
+        UInt32 numOfMip = 1;
+        UInt32 bytesOfKeyVal = 0;
+
+        writer.Write(glType);
+        writer.Write(glTypeSize);
+        writer.Write(glFormat);
+        writer.Write(glInterformat);
+        writer.Write(glBaseInternalFormat);
+        writer.Write(width);
+        writer.Write(height);
+        writer.Write(depth);
+        writer.Write(numOfArrElem);
+        writer.Write(numOfFace);
+        writer.Write(numOfMip);
+        writer.Write(bytesOfKeyVal);
+
+        UInt32 imageSize = (UInt32)(texSize * channels * glTypeSize);
+        writer.Write(imageSize);
+
+        if (tileEnabled)
+        {
+            for (int j = 0; j < origHeight; j++)
+                for (int k = 0; k < origDepth; k++)
+                    for (int i = 0; i < origWidth; i++)
+                    {
+                        int startIndex = k * origWidth * origHeight * channels + j * origWidth * channels + i * channels;
+                        writer.Write(Half.GetBytes((Half)data[startIndex]));
+                    }
+        }
+        else
+        {
+            for (int i = 0; i < data.Length; ++i)
+            {
+                writer.Write(Half.GetBytes((Half)data[i]));
+            }
+        }
+
+        writer.Close();
+        fs.Close();
+    }
+
 
     public void SaveTextureAsKTX(RenderTexture rtex, String name, bool tile3D = false)
     {

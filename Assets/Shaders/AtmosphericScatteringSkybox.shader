@@ -125,7 +125,7 @@ Shader "Skybox/AtmosphericScattering"
 				float2 cloudUV = (screenPos.xy + 1.0) / 2.0;
 				float4 cloudColor = tex2D(_CloudTexture, cloudUV);
 
-				float3 finalColor = lightInscatter * (1 - cloudColor.a) + cloudColor.rgb * cloudColor.a;
+				float3 finalColor = lightInscatter * (1 - cloudColor.a) + cloudColor.rgb;
 
 				return float4(finalColor.xyz, 1);
 			}

@@ -970,7 +970,7 @@ MonoBehaviour:
   MieExtinctionCoef: 1
   MieG: 0.407
   DistanceScale: 3
-  HFBetaRayleighScatterCoef: 7
+  HFBetaRayleighScatterCoef: 1
   HFBetaMieScatterCoef: 6
   HFBetaAbsorptionScatterCoef: 4
   HFMieAsymmetry: 0.5
