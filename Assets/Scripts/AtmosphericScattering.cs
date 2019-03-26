@@ -257,7 +257,7 @@ public class AtmosphericScattering : MonoBehaviour
         Texture nullTexture = null;
         Graphics.Blit(nullTexture, _weatherMap, _weatherMat, 0);
 
-        SaveTextureAsKTX(_weatherMap, "weathermap");
+        //SaveTextureAsKTX(_weatherMap, "weathermap");
     }
 
     private void InitializeCloudRelated()
@@ -267,7 +267,7 @@ public class AtmosphericScattering : MonoBehaviour
         if (_cloud3DNoiseTexB == null)
             _cloud3DNoiseTexB = Resources.Load("enviro_clouds_detail_low") as Texture3D;
 
-        SaveTex3DAsKTX(_cloud3DNoiseTexA, _cloud3DNoiseTexB, false);
+        //SaveTex3DAsKTX(_cloud3DNoiseTexA, _cloud3DNoiseTexB, false);
         //ReadTextureFromKTX(_cloud3DNoiseTexA, "noiseShape");
         //ReadTextureFromKTX(_cloud3DNoiseTexB, "noiseErosion");
         CreateWeatherMap();
@@ -333,8 +333,8 @@ public class AtmosphericScattering : MonoBehaviour
         UpdateCommonComputeShaderParameters(kernel);
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
-        SaveTextureAsKTX(_skyboxLUT2, "skyboxlut"+_skyboxCount++, true);
-        SaveTextureAsKTX(_skyboxLUTSingle, "skyboxlutsingle", true);
+        //SaveTextureAsKTX(_skyboxLUT2, "skyboxlut"+_skyboxCount++, true);
+        //SaveTextureAsKTX(_skyboxLUTSingle, "skyboxlutsingle", true);
     }
 
     private void PrecomputeMultipleSkyboxLUT()
@@ -346,7 +346,7 @@ public class AtmosphericScattering : MonoBehaviour
         UpdateCommonComputeShaderParameters(kernel);
         ScatteringComputeShader.Dispatch(kernel, (int)_skyboxLUTSize.x, (int)_skyboxLUTSize.y, (int)_skyboxLUTSize.z);
 
-        SaveTextureAsKTX(_skyboxLUT2, "skyboxlut"+_skyboxCount++, true);
+        //SaveTextureAsKTX(_skyboxLUT2, "skyboxlut"+_skyboxCount++, true);
     }
 
     /// <summary>
@@ -365,7 +365,7 @@ public class AtmosphericScattering : MonoBehaviour
         Texture nullTexture = null;
         Graphics.Blit(nullTexture, _transmittanceLUT, _frostbiteMat, 0);
 
-        SaveTextureAsKTX(_transmittanceLUT, "transmittance");
+        //SaveTextureAsKTX(_transmittanceLUT, "transmittance");
     }
 
     private void PrecomputeSkyboxAlltogether()
@@ -427,7 +427,7 @@ public class AtmosphericScattering : MonoBehaviour
         CBUtility.WriteIntoRenderTexture(_skyboxLUT, channels, buffer, FrostbiteWriteShader);
 
         buffer.Release();
-        SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
+        //SaveTextureAsKTX(_skyboxLUT, "skyboxlut", true);
     }
 
     /// <summary>
@@ -448,7 +448,7 @@ public class AtmosphericScattering : MonoBehaviour
         Texture nullTexture = null;
         Graphics.Blit(nullTexture, _gatherSumLUT2, _frostbiteMat, 1);
 
-        SaveTextureAsKTX(_gatherSumLUT2, "gathersum" + _gatherSumCount++);
+        //SaveTextureAsKTX(_gatherSumLUT2, "gathersum" + _gatherSumCount++);
     }
 
     /// <summary>
@@ -490,7 +490,7 @@ public class AtmosphericScattering : MonoBehaviour
             Graphics.Blit(sum, _gatherSumLUT);
         }
 
-        SaveTextureAsKTX(_gatherSumLUT, "gathersum");
+        //SaveTextureAsKTX(_gatherSumLUT, "gathersum");
     }
 
     private void PrecomputeSkyAndSunlightRadiance()
@@ -516,12 +516,12 @@ public class AtmosphericScattering : MonoBehaviour
 
         Texture nullTexture = null;
         Graphics.Blit(nullTexture, _skylightLUT, _frostbiteMat, 3);
-        SaveTextureAsKTX(_skylightLUT, "skylightlut");
+        //SaveTextureAsKTX(_skylightLUT, "skylightlut");
 
         // draw sun light lut
         nullTexture = null;
         Graphics.Blit(nullTexture, _sunlightLUT, _frostbiteMat, 4);
-        SaveTextureAsKTX(_sunlightLUT, "sunlightlut");
+        //SaveTextureAsKTX(_sunlightLUT, "sunlightlut");
     }
 
     /// <summary>
@@ -661,8 +661,8 @@ public class AtmosphericScattering : MonoBehaviour
 
         if (!AerialPerspPersisted)
         {
-            SaveTextureAsKTX(_inscatteringLUT, "apinscatter", true);
-            SaveTextureAsKTX(_extinctionLUT, "apextinction", true);
+            //SaveTextureAsKTX(_inscatteringLUT, "apinscatter", true);
+            //SaveTextureAsKTX(_extinctionLUT, "apextinction", true);
             AerialPerspPersisted = true;
         }
 
@@ -701,14 +701,14 @@ public class AtmosphericScattering : MonoBehaviour
     /// <summary>
     /// 
     /// </summary>
-    [ImageEffectOpaque]
-    public void OnRenderImage(RenderTexture source, RenderTexture destination)
-    {
-        _frostbiteMat.SetTexture("_Background", source);
+    //[ImageEffectOpaque]
+    //public void OnRenderImage(RenderTexture source, RenderTexture destination)
+    //{
+    //    _frostbiteMat.SetTexture("_Background", source);
 
-        Texture nullTexture = null;
-        Graphics.Blit(nullTexture, destination, _frostbiteMat, 2);
-    }
+    //    Texture nullTexture = null;
+    //    Graphics.Blit(nullTexture, destination, _frostbiteMat, 2);
+    //}
 
     Texture2D ToTexture2D(RenderTexture rTex)
 	{
